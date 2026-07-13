@@ -3,10 +3,28 @@ import SwiftData
 import SwiftUI
 
 struct LogView: View {
+  private enum Field: Hashable {
+    case description
+    case manualSearch
+    case quantity
+  }
+
+  private enum QuantityMode: String, CaseIterable, Identifiable {
+    case servings = "Servings"
+    case grams = "Grams"
+
+    var id: Self { self }
+  }
+
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.modelContext) private var modelContext
   @StateObject private var model = LogViewModel()
-  @FocusState private var composerFocused: Bool
+  @FocusState private var focusedField: Field?
+  @State private var resultsExpanded = false
+  @State private var quantityMode = QuantityMode.servings
 
+  private let configuration = AppConfiguration.current
+  private let currentAnchor = "current-log-state"
   private let examples = [
     "Two large scrambled eggs",
     "One cup cooked jasmine rice",
@@ -14,146 +32,186 @@ struct LogView: View {
   ]
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
-        header
-        statusContent
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 16) {
+          transcript
+          Color.clear.frame(height: 1).id(currentAnchor)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 16)
       }
-      .padding()
+      .contentMargins(.horizontal, 20, for: .scrollContent)
+      .scrollDismissesKeyboard(.interactively)
+      .onChange(of: model.stage) { _, stage in
+        resultsExpanded = false
+        if stage != .idle && stage != .failed && stage != .clarifying {
+          focusedField = nil
+        }
+        withAnimation(reduceMotion ? nil : .snappy) {
+          proxy.scrollTo(currentAnchor, anchor: .bottom)
+        }
+      }
     }
-    .navigationTitle("Log")
-    .safeAreaInset(edge: .bottom) {
-      if model.stage == .idle || model.stage == .failed {
-        composer
-          .background(.bar)
-      }
+    .navigationTitle("Log Food")
+    .safeAreaInset(edge: .bottom, spacing: 0) {
+      actionDock
     }
     .sheet(isPresented: $model.showManualEntry) {
-      ManualEntryView()
+      ManualEntryView(onSaved: model.markManualSaved)
     }
-    .animation(.snappy, value: model.stage)
-  }
-
-  private var header: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("What did you eat?")
-        .font(.largeTitle.bold())
-      Text(
-        "Describe one food. JustLogIt interprets the wording on device, then lets you choose the USDA match."
-      )
-      .foregroundStyle(.secondary)
-    }
+    .toolbar { keyboardToolbar }
   }
 
   @ViewBuilder
-  private var statusContent: some View {
-    if let message = model.message {
-      Label(
-        message, systemImage: model.stage == .completed ? "checkmark.circle.fill" : "info.circle"
-      )
-      .foregroundStyle(model.stage == .completed ? .green : .secondary)
-      .accessibilityIdentifier("status-message")
-    }
+  private var transcript: some View {
+    if model.stage == .idle {
+      emptyPrompt
+    } else {
+      if !model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        UserUtteranceBubble(text: model.input)
+      }
 
-    switch model.stage {
-    case .idle:
-      examplesView
-    case .parsing:
-      progress("Understanding your description…")
-    case .searching:
-      progress("Searching FoodData Central…")
-    case .choosing:
-      parsedSummary
-      resultList
-    case .loadingDetails:
-      progress("Loading nutrition details…")
-    case .clarifying:
-      quantityClarification
-    case .reviewing:
-      review
-    case .completed:
-      completed
-    case .failed:
-      manualRecovery
+      if shouldShowInterpretation {
+        interpretationReceipt
+      }
+
+      switch model.stage {
+      case .idle:
+        EmptyView()
+      case .parsing:
+        ProcessingRow(title: "Understanding your description")
+      case .searching:
+        ProcessingRow(title: "Finding USDA matches")
+      case .choosing:
+        resultPicker
+      case .loadingDetails:
+        if let selection = model.selectedResult {
+          FoodSelectionReceipt(result: selection)
+        }
+        ProcessingRow(title: "Loading nutrition")
+      case .clarifying:
+        quantityPrompt
+      case .reviewing:
+        nutritionReview
+      case .completed:
+        completionReceipt
+      case .failed:
+        recoveryCard
+      }
     }
   }
 
-  private var composer: some View {
-    VStack(spacing: 12) {
-      TextField("Example: Two large scrambled eggs", text: $model.input, axis: .vertical)
-        .lineLimit(2...5)
-        .textFieldStyle(.roundedBorder)
-        .focused($composerFocused)
-        .submitLabel(.search)
-        .onSubmit(model.submit)
-        .accessibilityIdentifier("food-description")
+  private var emptyPrompt: some View {
+    VStack(alignment: .leading, spacing: 24) {
+      VStack(alignment: .leading, spacing: 8) {
+        Image(systemName: "fork.knife")
+          .font(.title2.weight(.semibold))
+          .foregroundStyle(.tint)
+          .accessibilityHidden(true)
+        Text("What did you eat?")
+          .font(.title.bold())
+        Text("Describe one food and the amount. You’ll review the match before it’s saved.")
+          .foregroundStyle(.secondary)
+      }
 
-      HStack {
-        Button("Enter manually") { model.showManualEntry = true }
+      if configuration.providerDescription == "Not configured" {
+        VStack(alignment: .leading, spacing: 10) {
+          Label("USDA matching isn’t configured", systemImage: "exclamationmark.triangle.fill")
+            .font(.headline)
+          Text("You can still save nutrition with manual entry.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+          Button("Enter Manually") {
+            focusedField = nil
+            model.showManualEntry = true
+          }
           .buttonStyle(.bordered)
-        Spacer()
-        Button("Continue", systemImage: "arrow.right") {
-          composerFocused = false
-          model.submit()
         }
-        .buttonStyle(.borderedProminent)
-        .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .accessibilityIdentifier("continue-button")
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
       }
 
-      Text(
-        "Parsing happens on device. Derived food search terms are sent to the configured USDA service; saved entries stay on this device."
-      )
-      .font(.caption)
-      .foregroundStyle(.secondary)
-    }
-    .padding()
-  }
-
-  private var examplesView: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text("Try an example").font(.headline)
-      ForEach(examples, id: \.self) { example in
-        Button {
-          model.input = example
-          model.submit()
-        } label: {
-          Label(example, systemImage: "sparkles")
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Examples")
+          .font(.headline)
+        ForEach(examples, id: \.self) { example in
+          Button {
+            model.input = example
+            submitDescription()
+          } label: {
+            HStack(spacing: 12) {
+              Text(example)
+                .multilineTextAlignment(.leading)
+              Spacer(minLength: 8)
+              Image(systemName: "arrow.up.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+          }
+          .buttonStyle(.plain)
+          .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 14))
+          .accessibilityHint("Uses this example as your food description")
         }
-        .buttonStyle(.bordered)
+      }
+
+      Label("Description interpreted on this device", systemImage: "lock.shield")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var shouldShowInterpretation: Bool {
+    model.parsed != nil
+      && model.stage != .parsing
+      && model.stage != .completed
+  }
+
+  private var interpretationReceipt: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("INTERPRETED AS")
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityAddTraits(.isHeader)
+      Text(model.parsed?.productName ?? model.manualSearchTerms)
+        .font(.headline)
+      if let brand = model.parsed?.brand, !brand.isEmpty {
+        Text(brand)
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      if let quantity = model.parsed?.quantityText, !quantity.isEmpty {
+        Label(quantity, systemImage: "scalemass")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      if model.parsed?.containsMultipleFoods == true {
+        Label("Matching the principal food from your description", systemImage: "info.circle")
+          .font(.caption)
+          .foregroundStyle(.orange)
       }
     }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
   }
 
-  private func progress(_ title: String) -> some View {
-    VStack(spacing: 16) {
-      ProgressView()
-      Text(title).foregroundStyle(.secondary)
-      Button("Cancel", role: .cancel, action: model.cancel)
-    }
-    .frame(maxWidth: .infinity)
-    .padding(.vertical, 40)
-    .accessibilityElement(children: .combine)
-  }
-
-  private var parsedSummary: some View {
-    GroupBox("Understood") {
-      VStack(alignment: .leading, spacing: 4) {
-        if let brand = model.parsed?.brand {
-          Text(brand).font(.subheadline).foregroundStyle(.secondary)
-        }
-        Text(model.parsed?.productName ?? model.manualSearchTerms).font(.headline)
-        if let quantity = model.parsed?.quantityText { Text(quantity).foregroundStyle(.secondary) }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-    }
-  }
-
-  private var resultList: some View {
+  private var resultPicker: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Choose the matching food").font(.title2.bold())
-      ForEach(model.results) { result in
+      Text("Choose a Match")
+        .font(.title2.bold())
+        .accessibilityAddTraits(.isHeader)
+      Text("Nutrition varies by product and preparation.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+
+      ForEach(Array(model.results.prefix(resultsExpanded ? model.results.count : 5))) { result in
         Button {
           model.select(result)
         } label: {
@@ -162,92 +220,372 @@ struct LogView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("usda-result-\(result.fdcID)")
       }
-      Button("Edit search") {
-        model.manualSearchTerms =
-          model.parsed.map { FoodSearchQueryBuilder().build(from: $0).query } ?? model.input
-        model.cancel()
-      }
-      Button("Enter nutrition manually") { model.showManualEntry = true }
-    }
-  }
 
-  private var quantityClarification: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("How much did you eat?").font(.title2.bold())
-      if let details = model.details {
-        LabeledContent("USDA serving", value: details.householdServing ?? servingText(details))
-      }
-      TextField("USDA servings", text: $model.clarificationServings)
-        .keyboardType(.decimalPad)
-        .textFieldStyle(.roundedBorder)
-      Button("Use servings", action: model.resolveWithServings)
-        .buttonStyle(.borderedProminent)
-      Text("or").frame(maxWidth: .infinity).foregroundStyle(.secondary)
-      TextField("Consumed grams", text: $model.clarificationGrams)
-        .keyboardType(.decimalPad)
-        .textFieldStyle(.roundedBorder)
-      Button("Use grams", action: model.resolveWithGrams)
-        .buttonStyle(.bordered)
-      Divider()
-      Button("Choose a different food") { model.searchManually() }
-      Button("Enter nutrition manually") { model.showManualEntry = true }
-    }
-  }
-
-  private var review: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Review entry").font(.title2.bold())
-      if let details = model.details, let resolution = model.resolution {
-        GroupBox {
-          VStack(alignment: .leading, spacing: 6) {
-            Text(details.description).font(.headline)
-            if let brand = details.brandOwner { Text(brand).foregroundStyle(.secondary) }
-            Text(resolution.displayText)
-            if model.parsed?.isApproximate == true { Label("Approximate", systemImage: "tilde") }
+      if model.results.count > 5 {
+        Button(resultsExpanded ? "Show Fewer Matches" : "Show \(model.results.count - 5) More") {
+          withAnimation(reduceMotion ? nil : .snappy) {
+            resultsExpanded.toggle()
           }
-          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.bordered)
+      }
+
+      Divider().padding(.top, 4)
+      Menu("Other Options", systemImage: "ellipsis.circle") {
+        Button("Edit Description", systemImage: "pencil") {
+          model.cancel()
+          focusedField = .description
+        }
+        Button("Enter Nutrition Manually", systemImage: "square.and.pencil") {
+          model.showManualEntry = true
         }
       }
-      NutrientSummaryView(nutrients: model.nutrients)
-      Text("USDA FoodData Central • FDC \(model.details?.fdcID ?? 0)")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      Button("Save entry", systemImage: "checkmark") {
-        do {
-          modelContext.insert(try model.makeRecord())
-          try modelContext.save()
-          model.markSaved()
-        } catch {
-          model.markSaveFailed()
+    }
+  }
+
+  private var quantityPrompt: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("How Much Did You Eat?")
+        .font(.title2.bold())
+        .accessibilityAddTraits(.isHeader)
+
+      if let details = model.details {
+        VStack(alignment: .leading, spacing: 4) {
+          Text(details.description)
+            .font(.headline)
+          LabeledContent("USDA serving", value: details.householdServing ?? servingText(details))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+      }
+
+      if let message = model.message {
+        Label(message, systemImage: "info.circle.fill")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("status-message")
+      }
+
+      Picker("Quantity unit", selection: $quantityMode) {
+        ForEach(QuantityMode.allCases) { mode in
+          Text(mode.rawValue).tag(mode)
+        }
+      }
+      .pickerStyle(.segmented)
+
+      LabeledContent(quantityMode == .servings ? "Number of servings" : "Consumed mass") {
+        HStack(spacing: 6) {
+          TextField(
+            quantityMode == .servings ? "1" : "100",
+            text: quantityMode == .servings
+              ? $model.clarificationServings : $model.clarificationGrams
+          )
+          .keyboardType(.decimalPad)
+          .multilineTextAlignment(.trailing)
+          .focused($focusedField, equals: .quantity)
+          .frame(minWidth: 56)
+          Text(quantityMode == .servings ? "servings" : "g")
+            .foregroundStyle(.secondary)
+        }
+      }
+      .padding(14)
+      .background(.background, in: .rect(cornerRadius: 12))
+      .overlay {
+        RoundedRectangle(cornerRadius: 12)
+          .stroke(.separator, lineWidth: 0.5)
+      }
+
+      Button("Review Nutrition", systemImage: "arrow.right") {
+        focusedField = nil
+        if quantityMode == .servings {
+          model.resolveWithServings()
+        } else {
+          model.resolveWithGrams()
         }
       }
       .buttonStyle(.borderedProminent)
-      .frame(maxWidth: .infinity)
-      .accessibilityIdentifier("save-entry")
-      Button("Choose a different food") { model.searchManually() }
+      .controlSize(.large)
+      .disabled(activeQuantity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+      Menu("Other Options", systemImage: "ellipsis.circle") {
+        Button("Choose a Different Food", systemImage: "arrow.uturn.backward") {
+          model.searchManually()
+        }
+        Button("Enter Nutrition Manually", systemImage: "square.and.pencil") {
+          model.showManualEntry = true
+        }
+      }
     }
+    .padding(16)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
   }
 
-  private var completed: some View {
-    ContentUnavailableView {
-      Label("Logged", systemImage: "checkmark.circle.fill")
-    } description: {
-      Text("Your nutrition snapshot is saved locally.")
-    } actions: {
-      Button("Log another food", action: model.reset)
-        .buttonStyle(.borderedProminent)
-        .accessibilityIdentifier("log-another")
-    }
+  private var activeQuantity: String {
+    quantityMode == .servings ? model.clarificationServings : model.clarificationGrams
   }
 
-  private var manualRecovery: some View {
+  private var nutritionReview: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("Review entry")
+        .font(.title2.bold())
+        .accessibilityAddTraits(.isHeader)
+
+      if let details = model.details, let resolution = model.resolution {
+        VStack(alignment: .leading, spacing: 5) {
+          Text(details.description)
+            .font(.headline)
+          if let brand = details.brandOwner, !brand.isEmpty {
+            Text(brand)
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+          Label(resolution.displayText, systemImage: "scalemass")
+            .font(.subheadline)
+          if model.parsed?.isApproximate == true {
+            Label("Approximate quantity", systemImage: "tilde")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+        }
+      }
+
+      MacroSummaryView(nutrients: model.nutrients)
+
+      if let fdcID = model.details?.fdcID {
+        Text("USDA FoodData Central · FDC \(fdcID)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      if let message = model.message {
+        Label(message, systemImage: "exclamationmark.circle.fill")
+          .font(.subheadline)
+          .foregroundStyle(.red)
+          .accessibilityIdentifier("status-message")
+      }
+
+      Button("Choose a Different Food") {
+        model.searchManually()
+      }
+      .font(.subheadline)
+    }
+    .padding(16)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
+  }
+
+  private var completionReceipt: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Label("Food Logged", systemImage: "checkmark.circle.fill")
+        .font(.title2.bold())
+        .foregroundStyle(.green)
+      Text("Your nutrition snapshot is saved on this device.")
+        .foregroundStyle(.secondary)
+      if let message = model.message {
+        Text(message)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("status-message")
+      }
+    }
+    .padding(18)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.green.opacity(0.1), in: .rect(cornerRadius: 16))
+  }
+
+  private var recoveryCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      TextField("USDA search terms", text: $model.manualSearchTerms)
-        .textFieldStyle(.roundedBorder)
-        .accessibilityIdentifier("manual-search")
-      Button("Search USDA", action: model.searchManually)
+      Label(recoveryTitle, systemImage: "exclamationmark.circle.fill")
+        .font(.headline)
+        .foregroundStyle(.orange)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("recovery-title")
+
+      Text(model.message ?? "Try simpler search terms or enter nutrition manually.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier("status-message")
+
+      HStack {
+        Button("Edit Description") {
+          model.cancel()
+          focusedField = .description
+        }
+        Spacer()
+        Button("Enter Manually") {
+          focusedField = nil
+          model.showManualEntry = true
+        }
+      }
+      .font(.subheadline)
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.orange.opacity(0.1), in: .rect(cornerRadius: 16))
+  }
+
+  private var recoveryTitle: String {
+    let message = model.message?.lowercased() ?? ""
+    if message.contains("no usda") || message.contains("no match") {
+      return "No Matches Found"
+    }
+    if message.contains("search") || message.contains("network") || message.contains("connect") {
+      return "Couldn’t Reach USDA"
+    }
+    if message.contains("details") || message.contains("selected food") {
+      return "Couldn’t Load This Food"
+    }
+    return "Couldn’t Interpret That"
+  }
+
+  @ViewBuilder
+  private var actionDock: some View {
+    switch model.stage {
+    case .idle:
+      dockContainer { descriptionComposer }
+    case .parsing, .searching, .loadingDetails:
+      dockContainer {
+        Button(role: .cancel, action: model.cancel) {
+          Text("Cancel")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("cancel-operation")
+      }
+    case .reviewing:
+      dockContainer {
+        Button(action: saveEntry) {
+          Label("Save Entry", systemImage: "checkmark")
+            .frame(maxWidth: .infinity)
+        }
         .buttonStyle(.borderedProminent)
-      Button("Enter nutrition manually") { model.showManualEntry = true }
+        .controlSize(.large)
+        .accessibilityIdentifier("save-entry")
+      }
+    case .completed:
+      dockContainer {
+        Button(action: model.reset) {
+          Label("Log Another Food", systemImage: "plus")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .accessibilityIdentifier("log-another")
+      }
+    case .failed:
+      dockContainer { searchComposer }
+    case .choosing, .clarifying:
+      EmptyView()
+    }
+  }
+
+  private var descriptionComposer: some View {
+    HStack(alignment: .bottom, spacing: 10) {
+      Button {
+        focusedField = nil
+        model.showManualEntry = true
+      } label: {
+        Image(systemName: "plus")
+          .frame(width: 32, height: 32)
+      }
+      .buttonStyle(.bordered)
+      .clipShape(.circle)
+      .accessibilityLabel("Enter nutrition manually")
+      .accessibilityIdentifier("manual-entry-button")
+
+      TextField("Food and amount", text: $model.input, axis: .vertical)
+        .lineLimit(1...4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.background, in: .rect(cornerRadius: 18))
+        .overlay {
+          RoundedRectangle(cornerRadius: 18)
+            .stroke(.separator, lineWidth: 0.5)
+        }
+        .focused($focusedField, equals: .description)
+        .submitLabel(.continue)
+        .onSubmit(submitDescription)
+        .accessibilityIdentifier("food-description")
+
+      Button(action: submitDescription) {
+        Image(systemName: "arrow.up")
+          .font(.body.bold())
+          .frame(width: 34, height: 34)
+      }
+      .buttonStyle(.borderedProminent)
+      .clipShape(.circle)
+      .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .accessibilityLabel("Continue")
+      .accessibilityIdentifier("continue-button")
+    }
+  }
+
+  private var searchComposer: some View {
+    HStack(alignment: .bottom, spacing: 10) {
+      TextField("Search USDA", text: $model.manualSearchTerms, axis: .vertical)
+        .lineLimit(1...3)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.background, in: .rect(cornerRadius: 18))
+        .overlay {
+          RoundedRectangle(cornerRadius: 18)
+            .stroke(.separator, lineWidth: 0.5)
+        }
+        .focused($focusedField, equals: .manualSearch)
+        .submitLabel(.search)
+        .onSubmit(searchManually)
+        .accessibilityIdentifier("manual-search")
+
+      Button(action: searchManually) {
+        Image(systemName: "magnifyingglass")
+          .font(.body.bold())
+          .frame(width: 34, height: 34)
+      }
+      .buttonStyle(.borderedProminent)
+      .clipShape(.circle)
+      .disabled(model.manualSearchTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .accessibilityLabel("Search USDA")
+    }
+  }
+
+  private func dockContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    VStack(spacing: 0) {
+      Divider()
+      content()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+    .background(.bar)
+  }
+
+  @ToolbarContentBuilder
+  private var keyboardToolbar: some ToolbarContent {
+    ToolbarItemGroup(placement: .keyboard) {
+      Spacer()
+      Button("Done") { focusedField = nil }
+    }
+  }
+
+  private func submitDescription() {
+    focusedField = nil
+    model.submit()
+  }
+
+  private func searchManually() {
+    focusedField = nil
+    model.searchManually()
+  }
+
+  private func saveEntry() {
+    do {
+      let entry = try model.makeRecord()
+      modelContext.insert(entry)
+      try modelContext.save()
+      model.markSaved()
+      Task {
+        await HealthSyncCoordinator.syncIfEnabled(entry, modelContext: modelContext)
+      }
+    } catch {
+      model.markSaveFailed()
     }
   }
 
@@ -259,30 +597,159 @@ struct LogView: View {
   }
 }
 
+private struct UserUtteranceBubble: View {
+  let text: String
+
+  var body: some View {
+    HStack {
+      Spacer(minLength: 44)
+      Text(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .foregroundStyle(.white)
+        .background(.tint, in: .rect(cornerRadius: 18))
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("You entered, \(text)")
+  }
+}
+
+private struct ProcessingRow: View {
+  let title: String
+
+  var body: some View {
+    HStack(spacing: 12) {
+      ProgressView()
+      Text(title)
+        .foregroundStyle(.secondary)
+    }
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .combine)
+  }
+}
+
+private struct FoodSelectionReceipt: View {
+  let result: FoodSearchResult
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: "checkmark.circle.fill")
+        .foregroundStyle(.tint)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(result.displayDescription)
+          .font(.headline)
+        if let brand = result.brandName ?? result.brandOwner, !brand.isEmpty {
+          Text(brand)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+      }
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 14))
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Selected food, \(result.displayDescription)")
+  }
+}
+
 private struct USDAResultRow: View {
   let result: FoodSearchResult
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(result.description).font(.headline).foregroundStyle(.primary)
-      if let brand = result.brandName ?? result.brandOwner {
-        Text(brand).font(.subheadline).foregroundStyle(.secondary)
-      }
-      HStack {
-        if let household = result.householdServing {
-          Text(household)
-        } else if let size = result.servingSize, let unit = result.servingSizeUnit {
-          Text("\(size.formatted()) \(unit)")
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(result.displayDescription)
+          .font(.headline)
+          .foregroundStyle(.primary)
+        if let brand = result.brandName ?? result.brandOwner, !brand.isEmpty {
+          Text(brand)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
-        Spacer()
-        Text(result.dataType)
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: 8) { resultMetadata }
+          VStack(alignment: .leading, spacing: 4) { resultMetadata }
+        }
       }
-      .font(.caption)
-      .foregroundStyle(.secondary)
+      Spacer(minLength: 0)
+      Image(systemName: "chevron.right")
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
     }
-    .padding()
+    .padding(14)
+    .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 14))
+    .contentShape(.rect)
+    .accessibilityElement(children: .combine)
+    .accessibilityHint("Selects this USDA food")
+  }
+
+  @ViewBuilder
+  private var resultMetadata: some View {
+    if let serving = result.servingDescription {
+      Text(serving)
+    }
+    Text(result.shortDataType)
+  }
+}
+
+private struct MacroSummaryView: View {
+  let nutrients: [NutrientAmount]
+
+  private let primaryKeys: [NutrientKey] = [.energy, .protein, .carbohydrate, .totalFat]
+
+  var body: some View {
+    let primary = primaryKeys.compactMap { key in nutrients.first(where: { $0.key == key }) }
+    let remaining = nutrients.filter { !primaryKeys.contains($0.key) }
+
+    VStack(alignment: .leading, spacing: 14) {
+      if primary.isEmpty {
+        Label("Nutrition unavailable", systemImage: "questionmark.circle")
+          .foregroundStyle(.secondary)
+      } else {
+        ViewThatFits(in: .horizontal) {
+          HStack(alignment: .top, spacing: 10) {
+            ForEach(primary) { nutrient in
+              MacroValue(nutrient: nutrient)
+                .frame(maxWidth: .infinity)
+            }
+          }
+          VStack(spacing: 10) {
+            ForEach(primary) { nutrient in
+              MacroValue(nutrient: nutrient)
+            }
+          }
+        }
+      }
+
+      if !remaining.isEmpty {
+        DisclosureGroup("More Nutrients") {
+          NutrientSummaryView(nutrients: remaining)
+            .padding(.top, 10)
+        }
+      }
+    }
+  }
+}
+
+private struct MacroValue: View {
+  let nutrient: NutrientAmount
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(nutrient.key.displayName)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      Text(nutrient.formattedAmount)
+        .font(nutrient.key == .energy ? .title2.bold() : .headline)
+        .monospacedDigit()
+    }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(.regularMaterial, in: .rect(cornerRadius: 14))
+    .accessibilityElement(children: .combine)
   }
 }
 
@@ -290,17 +757,43 @@ struct NutrientSummaryView: View {
   let nutrients: [NutrientAmount]
 
   var body: some View {
-    Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 10) {
-      ForEach(nutrients) { nutrient in
-        GridRow {
-          Text(nutrient.key.displayName)
-          Text(
-            "\(nutrient.amount.formatted(.number.precision(.fractionLength(0...1)))) \(nutrient.unit)"
-          )
-          .monospacedDigit()
-          .frame(maxWidth: .infinity, alignment: .trailing)
+    if nutrients.isEmpty {
+      Label("Nutrition unavailable", systemImage: "questionmark.circle")
+        .foregroundStyle(.secondary)
+    } else {
+      VStack(spacing: 12) {
+        ForEach(nutrients) { nutrient in
+          LabeledContent(nutrient.key.displayName, value: nutrient.formattedAmount)
+            .accessibilityElement(children: .combine)
         }
       }
     }
+  }
+}
+
+extension FoodSearchResult {
+  fileprivate var displayDescription: String {
+    description == description.uppercased() ? description.localizedCapitalized : description
+  }
+
+  fileprivate var servingDescription: String? {
+    if let householdServing, !householdServing.isEmpty { return householdServing }
+    if let servingSize, let servingSizeUnit {
+      return "\(servingSize.formatted()) \(servingSizeUnit)"
+    }
+    return nil
+  }
+
+  fileprivate var shortDataType: String {
+    if dataType.localizedCaseInsensitiveContains("branded") { return "Branded" }
+    if dataType.localizedCaseInsensitiveContains("survey") { return "Survey" }
+    if dataType.localizedCaseInsensitiveContains("foundation") { return "Foundation" }
+    return dataType
+  }
+}
+
+extension NutrientAmount {
+  fileprivate var formattedAmount: String {
+    "\(amount.formatted(.number.precision(.fractionLength(0...1)))) \(unit)"
   }
 }

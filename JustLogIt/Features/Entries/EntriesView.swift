@@ -10,6 +10,11 @@ struct EntriesView: View {
   @State private var searchText = ""
   @State private var entryPendingDeletion: FoodLogEntryRecord?
   @State private var deletionError: String?
+  let onLogFood: () -> Void
+
+  init(onLogFood: @escaping () -> Void = {}) {
+    self.onLogFood = onLogFood
+  }
 
   private var filteredEntries: [FoodLogEntryRecord] {
     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -22,6 +27,13 @@ struct EntriesView: View {
     }
   }
 
+  private var groupedEntries: [(date: Date, entries: [FoodLogEntryRecord])] {
+    let calendar = Calendar.current
+    return Dictionary(grouping: filteredEntries) { calendar.startOfDay(for: $0.consumedAt) }
+      .map { (date: $0.key, entries: $0.value) }
+      .sorted { $0.date > $1.date }
+  }
+
   var body: some View {
     Group {
       if entries.isEmpty {
@@ -29,19 +41,36 @@ struct EntriesView: View {
           Label("No entries yet", systemImage: "fork.knife")
         } description: {
           Text("Foods you log will appear here, with their saved nutrition snapshots.")
+        } actions: {
+          Button("Log food", systemImage: "plus", action: onLogFood)
+            .buttonStyle(.borderedProminent)
         }
       } else if filteredEntries.isEmpty {
-        ContentUnavailableView.search(text: searchText)
+        ContentUnavailableView {
+          Label("No matching entries", systemImage: "magnifyingglass")
+        } description: {
+          Text("No foods match “\(searchText)”.")
+        } actions: {
+          Button("Clear search") { searchText = "" }
+            .buttonStyle(.bordered)
+        }
       } else {
-        List(filteredEntries) { entry in
-          NavigationLink {
-            EntryDetailView(entry: entry)
-          } label: {
-            EntryRow(entry: entry)
-          }
-          .swipeActions {
-            Button("Delete", systemImage: "trash", role: .destructive) {
-              entryPendingDeletion = entry
+        List {
+          ForEach(groupedEntries, id: \.date) { group in
+            Section(sectionTitle(for: group.date)) {
+              ForEach(group.entries) { entry in
+                NavigationLink {
+                  EntryDetailView(entry: entry)
+                } label: {
+                  EntryRow(entry: entry)
+                }
+                .accessibilityIdentifier("entry-\(entry.id.uuidString)")
+                .swipeActions {
+                  Button("Delete", systemImage: "trash", role: .destructive) {
+                    entryPendingDeletion = entry
+                  }
+                }
+              }
             }
           }
         }
@@ -50,6 +79,7 @@ struct EntriesView: View {
     }
     .navigationTitle("Entries")
     .searchable(text: $searchText, prompt: "Food, brand, or description")
+    .scrollDismissesKeyboard(.interactively)
     .alert(
       "Delete entry?", isPresented: deletionConfirmationPresented, presenting: entryPendingDeletion
     ) { entry in
@@ -65,6 +95,13 @@ struct EntriesView: View {
     } message: {
       Text(deletionError ?? "The entry could not be deleted.")
     }
+  }
+
+  private func sectionTitle(for date: Date) -> String {
+    let calendar = Calendar.current
+    if calendar.isDateInToday(date) { return "Today" }
+    if calendar.isDateInYesterday(date) { return "Yesterday" }
+    return date.formatted(.dateTime.weekday(.wide).month(.wide).day())
   }
 
   private var deletionConfirmationPresented: Binding<Bool> {
@@ -122,22 +159,31 @@ private struct EntryRow: View {
         }
       }
 
-      HStack(spacing: 8) {
-        Text(entry.quantityDisplay)
-        if let protein = entry.protein {
-          Text("\(protein.formatted(.number.precision(.fractionLength(0...1)))) g protein")
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) {
+          metadata
+          Spacer()
         }
-        Spacer()
-        Text(entry.source.rawValue)
+        VStack(alignment: .leading, spacing: 3) { metadata }
       }
       .font(.caption)
       .foregroundStyle(.secondary)
 
-      Text(entry.consumedAt, format: .dateTime.month(.abbreviated).day().hour().minute())
+      Text(entry.consumedAt, format: .dateTime.hour().minute())
         .font(.caption2)
         .foregroundStyle(.tertiary)
     }
     .padding(.vertical, 3)
+    .accessibilityElement(children: .combine)
+  }
+
+  @ViewBuilder
+  private var metadata: some View {
+    Text(entry.quantityDisplay)
+    if let protein = entry.protein {
+      Text("\(protein.formatted(.number.precision(.fractionLength(0...1)))) g protein")
+    }
+    Text(entry.source.rawValue)
   }
 }
 
@@ -170,6 +216,28 @@ private struct EntryDetailView: View {
       Section("Nutrition") {
         NutrientSummaryView(nutrients: entry.nutrients)
           .padding(.vertical, 4)
+      }
+
+      if entry.healthSyncStatus != .notRequested {
+        Section("Apple Health") {
+          LabeledContent("Status", value: healthStatusDescription)
+          if let syncedAt = entry.healthSyncedAt {
+            LabeledContent(
+              "Updated", value: syncedAt.formatted(date: .abbreviated, time: .shortened))
+          }
+          if let error = entry.healthSyncError, entry.healthSyncStatus != .synced {
+            Text(error)
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+          if entry.healthSyncStatus == .failed {
+            Button("Try Apple Health Again", systemImage: "arrow.clockwise") {
+              Task {
+                await HealthSyncCoordinator.syncIfEnabled(entry, modelContext: modelContext)
+              }
+            }
+          }
+        }
       }
 
       if entry.source == .usda {
@@ -229,6 +297,16 @@ private struct EntryDetailView: View {
       "Per USDA serving"
     case .manual:
       "Manual nutrition"
+    }
+  }
+
+  private var healthStatusDescription: String {
+    switch entry.healthSyncStatus {
+    case .notRequested: "Not enabled"
+    case .pending: "Waiting to sync"
+    case .synced: "Saved"
+    case .denied: "Access not granted"
+    case .failed: "Needs attention"
     }
   }
 

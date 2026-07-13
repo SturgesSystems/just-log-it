@@ -15,6 +15,7 @@ This folder is the durable product backlog for JustLogIt. It deliberately separa
 | --- | --- | --- | --- |
 | P0 | [MVP](MVP.md) | Parse, select, calculate, review, and save | Now |
 | P1 | [Launch readiness](LaunchReadiness.md) | Safe public distribution | Core flow passes device tests |
+| P2 | [Conversation-first navigation](ConversationNavigation.md) | Logging home with adaptive sidebar and reusable foods | Core flow is stable enough to restructure navigation |
 | P2 | [HealthKit](HealthKit.md) | Optional nutrition write-back | Users value retained entries |
 | P2 | [Offline data](OfflineData.md) | Private/offline USDA lookup | Offline demand is demonstrated |
 | P2 | [Remembered foods](RememberedFoods.md) | Faster repeat logging | Repeat-query rate is material |

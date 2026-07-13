@@ -141,6 +141,29 @@ public enum NutrientKey: String, CaseIterable, Sendable, Codable {
   case potassium
   case vitaminD
   case caffeine
+  case water
+  case biotin
+  case chloride
+  case chromium
+  case copper
+  case folate
+  case iodine
+  case magnesium
+  case manganese
+  case molybdenum
+  case niacin
+  case pantothenicAcid
+  case phosphorus
+  case riboflavin
+  case selenium
+  case thiamin
+  case vitaminA
+  case vitaminB12
+  case vitaminB6
+  case vitaminC
+  case vitaminE
+  case vitaminK
+  case zinc
 
   public var displayName: String {
     switch self {
@@ -161,6 +184,29 @@ public enum NutrientKey: String, CaseIterable, Sendable, Codable {
     case .potassium: "Potassium"
     case .vitaminD: "Vitamin D"
     case .caffeine: "Caffeine"
+    case .water: "Water"
+    case .biotin: "Biotin"
+    case .chloride: "Chloride"
+    case .chromium: "Chromium"
+    case .copper: "Copper"
+    case .folate: "Folate"
+    case .iodine: "Iodine"
+    case .magnesium: "Magnesium"
+    case .manganese: "Manganese"
+    case .molybdenum: "Molybdenum"
+    case .niacin: "Niacin"
+    case .pantothenicAcid: "Pantothenic Acid"
+    case .phosphorus: "Phosphorus"
+    case .riboflavin: "Riboflavin"
+    case .selenium: "Selenium"
+    case .thiamin: "Thiamin"
+    case .vitaminA: "Vitamin A"
+    case .vitaminB12: "Vitamin B12"
+    case .vitaminB6: "Vitamin B6"
+    case .vitaminC: "Vitamin C"
+    case .vitaminE: "Vitamin E"
+    case .vitaminK: "Vitamin K"
+    case .zinc: "Zinc"
     }
   }
 
@@ -170,8 +216,14 @@ public enum NutrientKey: String, CaseIterable, Sendable, Codable {
     case .protein, .carbohydrate, .totalFat, .saturatedFat, .monounsaturatedFat,
       .polyunsaturatedFat, .fiber, .totalSugar, .addedSugar:
       "g"
-    case .cholesterol, .sodium, .calcium, .iron, .potassium, .caffeine: "mg"
-    case .vitaminD: "µg"
+    case .cholesterol, .sodium, .calcium, .iron, .potassium, .caffeine, .chloride,
+      .copper, .magnesium, .manganese, .niacin, .pantothenicAcid, .phosphorus,
+      .riboflavin, .thiamin, .vitaminB6, .vitaminC, .vitaminE, .zinc:
+      "mg"
+    case .vitaminD, .biotin, .chromium, .folate, .iodine, .molybdenum, .selenium,
+      .vitaminA, .vitaminB12, .vitaminK:
+      "µg"
+    case .water: "mL"
     }
   }
 }

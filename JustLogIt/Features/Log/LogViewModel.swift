@@ -122,6 +122,12 @@ final class LogViewModel: ObservableObject {
     message = "Entry saved on this device."
   }
 
+  func markManualSaved() {
+    reset()
+    stage = .completed
+    message = "Manual entry saved on this device."
+  }
+
   func markSaveFailed() {
     stage = .reviewing
     message = "The entry could not be saved. Your review has not been discarded."
@@ -174,8 +180,11 @@ final class LogViewModel: ObservableObject {
       manualSearchTerms = text
       stage = .failed
       message =
-        (error as? LocalizedError)?.errorDescription
-        ?? "On-device parsing failed. Edit the search terms and search manually."
+        if let parserError = error as? FoodParserError {
+          parserError.errorDescription
+        } else {
+          "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
+        }
     }
   }
 

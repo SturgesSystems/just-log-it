@@ -2,9 +2,13 @@ import SwiftUI
 
 struct SettingsView: View {
   private let configuration = AppConfiguration.current
+  private let healthWriter: any HealthNutritionWriting = HealthKitNutritionWriter.shared
 
   @State private var confirmsCacheClear = false
   @State private var cacheResultMessage: String?
+  @State private var healthMessage: String?
+  @State private var isRequestingHealthAccess = false
+  @AppStorage(HealthSyncCoordinator.preferenceKey) private var healthSyncEnabled = false
 
   var body: some View {
     List {
@@ -29,6 +33,34 @@ struct SettingsView: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+      }
+
+      Section {
+        Toggle(isOn: $healthSyncEnabled) {
+          Label("Save nutrition to Apple Health", systemImage: "heart.fill")
+        }
+        .disabled(!healthWriter.isAvailable || isRequestingHealthAccess)
+        .accessibilityIdentifier("health-sync-toggle")
+
+        if isRequestingHealthAccess {
+          HStack {
+            ProgressView()
+            Text("Requesting access…")
+          }
+        } else if !healthWriter.isAvailable {
+          Label("Apple Health isn’t available on this device.", systemImage: "info.circle")
+            .foregroundStyle(.secondary)
+        } else if let healthMessage {
+          Text(healthMessage)
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+        }
+      } header: {
+        Text("Apple Health")
+      } footer: {
+        Text(
+          "Optional and off by default. JustLogIt requests write-only access and saves each supported nutrient from a confirmed food entry. Added sugar remains in JustLogIt because Apple Health has no separate added-sugar field."
+        )
       }
 
       Section("Privacy") {
@@ -57,6 +89,14 @@ struct SettingsView: View {
       Button("OK", role: .cancel) { cacheResultMessage = nil }
     } message: {
       Text(cacheResultMessage ?? "")
+    }
+    .onChange(of: healthSyncEnabled) { _, enabled in
+      guard enabled else {
+        healthMessage =
+          "New entries will stay in JustLogIt only. Existing Health data is unchanged."
+        return
+      }
+      requestHealthAuthorization()
     }
   }
 
@@ -94,6 +134,31 @@ struct SettingsView: View {
       cacheResultMessage = "The downloaded food cache was cleared."
     } catch {
       cacheResultMessage = "The food cache could not be cleared. Please try again."
+    }
+  }
+
+  private func requestHealthAuthorization() {
+    isRequestingHealthAccess = true
+    healthMessage = nil
+    Task {
+      do {
+        let summary = try await healthWriter.requestAuthorization()
+        if summary.canWrite {
+          healthMessage =
+            summary.authorizedNutrientCount == summary.requestedNutrientCount
+            ? "Ready to save supported nutrition from new entries."
+            : "Ready. Apple Health will save the nutrient types you allowed."
+        } else {
+          healthSyncEnabled = false
+          healthMessage = "Write access wasn’t granted. You can change access in Health settings."
+        }
+      } catch {
+        healthSyncEnabled = false
+        healthMessage =
+          (error as? LocalizedError)?.errorDescription
+          ?? "Apple Health access couldn’t be requested."
+      }
+      isRequestingHealthAccess = false
     }
   }
 }

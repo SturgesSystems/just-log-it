@@ -9,3 +9,5 @@ Recommended user-facing language:
 > No accounts. No analytics. No tracking. Your food log stays on your device. When you search FoodData Central, only the resulting food search terms are sent transiently to retrieve USDA matches.
 
 The App Store privacy response must be re-audited against the deployed Cloudflare and USDA behavior before submission.
+
+Apple Health sync is optional, write-only, and disabled by default. When enabled, confirmed nutrition is written directly from the device to the user’s Health store. JustLogIt does not read Health data. HealthKit permissions are controlled per nutrient type, and a denied or failed write does not remove the locally saved entry.

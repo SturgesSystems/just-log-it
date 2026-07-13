@@ -21,6 +21,10 @@ final class FoodLogEntryRecord {
   var servingMultiplier: Double?
   var consumedGrams: Double?
   var nutrientsData: Data
+  var healthSyncStatusRawValue: String = HealthSyncStatus.notRequested.rawValue
+  var healthSyncVersion: Int = 1
+  var healthSyncedAt: Date?
+  var healthSyncError: String?
 
   init(
     id: UUID = UUID(),
@@ -79,9 +83,22 @@ final class FoodLogEntryRecord {
   var protein: Double? {
     nutrients.first(where: { $0.key == .protein })?.amount
   }
+
+  var healthSyncStatus: HealthSyncStatus {
+    get { HealthSyncStatus(rawValue: healthSyncStatusRawValue) ?? .notRequested }
+    set { healthSyncStatusRawValue = newValue.rawValue }
+  }
 }
 
-enum EntrySource: String, Codable {
+enum HealthSyncStatus: String, Codable {
+  case notRequested
+  case pending
+  case synced
+  case denied
+  case failed
+}
+
+enum EntrySource: String, Codable, Sendable {
   case usda = "USDA"
   case manual = "Manual"
 }

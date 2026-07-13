@@ -294,7 +294,15 @@ private struct USDAFoodDetailsDTO: Decodable {
   let labelNutrients: USDALabelNutrientsDTO?
 
   var domain: FoodDetails {
-    FoodDetails(
+    let per100Grams = NutrientMapper.canonicalize(foodNutrients ?? [])
+    let labeledServing = labelNutrients?.domain ?? []
+    let perServing = NutrientMapper.mergedServingNutrients(
+      label: labeledServing,
+      per100Grams: per100Grams,
+      servingSize: servingSize,
+      servingSizeUnit: servingSizeUnit
+    )
+    return FoodDetails(
       fdcID: fdcId,
       description: description,
       brandOwner: brandOwner,
@@ -302,8 +310,8 @@ private struct USDAFoodDetailsDTO: Decodable {
       servingSize: servingSize,
       servingSizeUnit: servingSizeUnit,
       householdServing: householdServingFullText,
-      nutrientsPer100Grams: (foodNutrients ?? []).compactMap(\.domain),
-      nutrientsPerServing: labelNutrients?.domain ?? [],
+      nutrientsPer100Grams: per100Grams,
+      nutrientsPerServing: perServing,
       publicationDate: publicationDate
     )
   }
@@ -363,6 +371,7 @@ private struct USDALabelNutrientsDTO: Decodable {
 
 private enum NutrientMapper {
   static func key(name: String, id: Int?) -> NutrientKey? {
+    if let id, let mapped = keysByUSDAID[id] { return mapped }
     let value = name.lowercased()
     if value.contains("energy") { return .energy }
     if value == "protein" { return .protein }
@@ -383,7 +392,85 @@ private enum NutrientMapper {
     if value.hasPrefix("potassium") { return .potassium }
     if value.contains("vitamin d") { return .vitaminD }
     if value == "caffeine" { return .caffeine }
+    if value == "water" { return .water }
+    if value.contains("biotin") { return .biotin }
+    if value.hasPrefix("chloride") { return .chloride }
+    if value.hasPrefix("chromium") { return .chromium }
+    if value.hasPrefix("copper") { return .copper }
+    if value.hasPrefix("folate, total") { return .folate }
+    if value.hasPrefix("iodine") { return .iodine }
+    if value.hasPrefix("magnesium") { return .magnesium }
+    if value.hasPrefix("manganese") { return .manganese }
+    if value.hasPrefix("molybdenum") { return .molybdenum }
+    if value.hasPrefix("niacin") { return .niacin }
+    if value.contains("pantothenic acid") { return .pantothenicAcid }
+    if value.hasPrefix("phosphorus") { return .phosphorus }
+    if value.hasPrefix("riboflavin") { return .riboflavin }
+    if value.hasPrefix("selenium") { return .selenium }
+    if value.hasPrefix("thiamin") { return .thiamin }
+    if value.contains("vitamin a, rae") { return .vitaminA }
+    if value.contains("vitamin b-12") || value.contains("vitamin b12") { return .vitaminB12 }
+    if value.contains("vitamin b-6") || value.contains("vitamin b6") { return .vitaminB6 }
+    if value.contains("vitamin c") { return .vitaminC }
+    if value.contains("vitamin e") && value.contains("alpha") { return .vitaminE }
+    if value.contains("vitamin k") { return .vitaminK }
+    if value.hasPrefix("zinc") { return .zinc }
     return nil
+  }
+
+  static func canonicalize(_ values: [USDAFoodNutrientDTO]) -> [NutrientAmount] {
+    var selected: [NutrientKey: (priority: Int, nutrient: NutrientAmount)] = [:]
+    for value in values {
+      guard let nutrient = value.domain else { continue }
+      let priority = mappingPriority(
+        key: nutrient.key, id: value.nutrient.id, sourceUnit: value.nutrient.unitName)
+      if selected[nutrient.key].map({ priority < $0.priority }) ?? true {
+        selected[nutrient.key] = (priority, nutrient)
+      }
+    }
+    return NutrientKey.allCases.compactMap { selected[$0]?.nutrient }
+  }
+
+  static func mergedServingNutrients(
+    label: [NutrientAmount],
+    per100Grams: [NutrientAmount],
+    servingSize: Double?,
+    servingSizeUnit: String?
+  ) -> [NutrientAmount] {
+    var values = Dictionary(uniqueKeysWithValues: label.map { ($0.key, $0) })
+    guard let servingSize, servingSize.isFinite, servingSize > 0,
+      servingSizeUnit?.caseInsensitiveCompare("g") == .orderedSame
+    else { return NutrientKey.allCases.compactMap { values[$0] } }
+    let multiplier = servingSize / 100
+    for nutrient in per100Grams where values[nutrient.key] == nil {
+      values[nutrient.key] = NutrientAmount(
+        key: nutrient.key, amount: nutrient.amount * multiplier, unit: nutrient.unit)
+    }
+    return NutrientKey.allCases.compactMap { values[$0] }
+  }
+
+  private static let keysByUSDAID: [Int: NutrientKey] = [
+    1003: .protein, 1004: .totalFat, 1005: .carbohydrate, 1008: .energy,
+    1057: .caffeine, 1078: .water, 1079: .fiber, 1087: .calcium, 1088: .chloride,
+    1089: .iron, 1090: .magnesium, 1091: .phosphorus, 1092: .potassium,
+    1093: .sodium, 1095: .zinc, 1096: .chromium, 1098: .copper, 1100: .iodine,
+    1101: .manganese, 1102: .molybdenum, 1103: .selenium, 1106: .vitaminA,
+    1109: .vitaminE, 1114: .vitaminD, 1162: .vitaminC, 1165: .thiamin,
+    1166: .riboflavin, 1167: .niacin, 1170: .pantothenicAcid, 1175: .vitaminB6,
+    1176: .biotin, 1177: .folate, 1178: .vitaminB12, 1185: .vitaminK,
+    1235: .addedSugar, 1253: .cholesterol, 1258: .saturatedFat,
+    1292: .monounsaturatedFat, 1293: .polyunsaturatedFat, 2000: .totalSugar,
+    2047: .energy, 2048: .energy,
+  ]
+
+  private static func mappingPriority(key: NutrientKey, id: Int?, sourceUnit: String) -> Int {
+    if key == .energy {
+      if id == 1008 && sourceUnit.caseInsensitiveCompare("kcal") == .orderedSame { return 0 }
+      if sourceUnit.caseInsensitiveCompare("kcal") == .orderedSame { return 1 }
+      if id == 1008 { return 2 }
+      return 3
+    }
+    return keysByUSDAID[id ?? -1] == key ? 0 : 1
   }
 
   static func normalize(key: NutrientKey, amount: Double, sourceUnit: String) -> NutrientAmount? {
@@ -395,9 +482,12 @@ private enum NutrientMapper {
     case ("kcal", "kcal"), ("g", "g"), ("mg", "mg"), ("µg", "µg"), ("ug", "µg"):
       converted = amount
     case ("g", "mg"): converted = amount * 1_000
+    case ("g", "µg"): converted = amount * 1_000_000
     case ("mg", "g"): converted = amount / 1_000
     case ("mg", "µg"): converted = amount * 1_000
     case ("µg", "mg"), ("ug", "mg"): converted = amount / 1_000
+    case ("µg", "g"), ("ug", "g"): converted = amount / 1_000_000
+    case ("g", "ml"), ("ml", "ml"): converted = amount
     default: return nil
     }
     return NutrientAmount(key: key, amount: converted)

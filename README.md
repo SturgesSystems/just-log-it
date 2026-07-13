@@ -42,6 +42,14 @@ USDA_API_KEY = your-development-key
 
 No release configuration embeds a USDA key. If neither value is present, the app launches normally and manual nutrition entry remains available.
 
+The Debug build reads `USDA_API_KEY` through the checked-in Info.plist template. The real value remains in ignored `Config/Secrets.xcconfig` and is not committed.
+
+## Apple Health
+
+Apple Health sync is optional and off by default. Enabling it in Settings requests write-only access to food and dietary nutrient types. Confirmed entries are always saved locally first; a HealthKit denial or write failure never discards the JustLogIt entry.
+
+JustLogIt writes every USDA nutrient that has a semantically equivalent HealthKit dietary type. Added sugar remains local because HealthKit exposes total dietary sugar but no distinct added-sugar type.
+
 ## Tests
 
 The deterministic domain package can be tested without Xcode:
@@ -63,13 +71,14 @@ xcodebuild test -project JustLogIt.xcodeproj -scheme JustLogIt -destination 'pla
 - The app includes no advertising or analytics SDK.
 - Only deterministic USDA search terms are sent to the configured food-data service.
 - The minimal Worker is designed not to retain request bodies or user identifiers.
+- Apple Health integration is optional, write-only, and disabled by default.
 
 See [Documentation/Privacy.md](Documentation/Privacy.md) for precise language and limitations.
 
 ## External shipping requirements
 
-- Apple Developer signing and HealthKit entitlement when that backlog item is implemented
+- Apple Developer signing and physical-device HealthKit permission testing
 - Production Cloudflare Worker URL and USDA secret
 - Public privacy-policy and support URLs
-- Final app icon, screenshots, and App Store metadata
+- Final screenshots and App Store metadata
 - Physical-device Foundation Models testing with the final iOS 27 release
