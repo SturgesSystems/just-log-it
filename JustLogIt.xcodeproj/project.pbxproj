@@ -46,6 +46,9 @@
 		FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02B213898318058E4263A83 /* AppConfigurationTests.swift */; };
 		FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D05C6A2EE7E7258B152170E /* SettingsView.swift */; };
 		FFB8BBBA3A6C9A08F1F4058D /* DiskCachedFoodDataProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */; };
+		AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */; };
+		CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */; };
+		EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +114,9 @@
 		F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserEvaluationCorpus.swift; sourceTree = "<group>"; };
 		F9221AD51051D16AB3665AD9 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModel.swift; sourceTree = "<group>"; };
+		AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraImagePicker.swift; sourceTree = "<group>"; };
+		CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComponents.swift; sourceTree = "<group>"; };
+		EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodResultViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -234,6 +240,9 @@
 		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */,
+				CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */,
+				EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */,
 				732C04D059CA7E11ECFD1BA2 /* LogView.swift */,
 				FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */,
 				8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */,
@@ -485,6 +494,9 @@
 				8E8D609947A73371AB2317DB /* HealthSyncCoordinator.swift in Sources */,
 				68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */,
 				916AB18574E9D1BA032575CF /* LocalizedNumberParser.swift in Sources */,
+				AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */,
+				CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */,
+				EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */,
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,

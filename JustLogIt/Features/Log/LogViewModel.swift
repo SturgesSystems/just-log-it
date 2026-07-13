@@ -752,7 +752,7 @@ final class LogViewModel: ObservableObject {
       guard isCurrentOperation(generation) else { return }
       let failureMessage =
         (error as? LocalizedError)?.errorDescription
-        ?? "Couldn’t interpret that. Search manually or try again."
+        ?? "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
       fail(.interpretation, message: failureMessage)
       return
     }

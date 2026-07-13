@@ -109,7 +109,9 @@ final class LogViewModelConcurrencyTests: XCTestCase {
     model.input = "An Oreo cookie"
 
     model.submit()
-    await waitUntil { model.stage == .choosing }
+    // Ranking is applied before any auto-select; assert on the ranked results
+    // rather than the picker stage (a high-confidence hit may auto-advance).
+    await waitUntil { model.results.count == 2 }
 
     XCTAssertEqual(model.results.map(\.fdcID), [101, 102])
   }

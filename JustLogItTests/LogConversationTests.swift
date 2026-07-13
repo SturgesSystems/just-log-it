@@ -67,8 +67,9 @@ final class LogConversationTests: XCTestCase {
   }
 
   func testEditUserMessageRewindsTranscriptAndClearsResults() async {
-    let model = await advanceToChoosing()
+    let model = await advanceToReviewing()
     XCTAssertFalse(model.results.isEmpty)
+    XCTAssertNotNil(model.selectedResult)
     XCTAssertGreaterThanOrEqual(model.transcript.filter(\.isUser).count, 1)
 
     guard case .user(let id, _, _) = model.transcript.first(where: \.isUser) else {
@@ -76,21 +77,22 @@ final class LogConversationTests: XCTestCase {
       return
     }
 
-    let turnsBeforeEdit = model.transcript.count
     model.editUserMessage(id: id, newText: "one apple")
-    await waitUntil { model.stage == .choosing || model.stage == .failed || model.stage == .reviewing }
-
-    // Edited message is the only user turn left (later turns dropped).
+    // Rewind + clear happen synchronously; assert before the async re-run repopulates.
     let userTurns = model.transcript.filter(\.isUser)
     XCTAssertEqual(userTurns.count, 1)
     XCTAssertEqual(userTurns.first?.text, "one apple")
-    XCTAssertEqual(model.input, "one apple")
-    // Transcript was rewound then rebuilt during re-run — should not keep post-edit tail from the old path.
-    XCTAssertLessThanOrEqual(model.transcript.count, turnsBeforeEdit + 4)
-    // Downstream selection/review state cleared before re-run.
+    // editUserMessage keeps the composer empty — the edited bubble is the source of truth.
+    XCTAssertEqual(model.input, "")
+    // Downstream selection/review state is cleared before the pipeline re-runs.
     XCTAssertNil(model.selectedResult)
     XCTAssertNil(model.details)
     XCTAssertNil(model.resolution)
+
+    // The rewound text drives a fresh interpretation (stage stayed .reviewing
+    // synchronously, so wait on the re-parsed identity instead).
+    await waitUntil { model.parsed?.productName.contains("apple") == true }
+    XCTAssertEqual(model.parsed?.productName.contains("apple"), true)
   }
 
   func testApplyWhenEatenSuggestionAnHourAgoSetsConsumedAt() async {
@@ -136,46 +138,39 @@ final class LogConversationTests: XCTestCase {
     )
     model.input = "two eggs"
     model.submit()
-    await waitUntil { model.stage == .choosing }
+    await waitUntil { model.stage == .reviewing }
 
     let users = model.transcript.filter(\.isUser)
     XCTAssertEqual(users.count, 1)
     XCTAssertEqual(users.first?.text, "two eggs")
+    // Auto-select echoes a "Using …" assistant turn into the transcript.
     XCTAssertTrue(model.transcript.contains(where: { !$0.isUser }))
   }
 
   // MARK: - Helpers
 
-  private func advanceToChoosing() async -> LogViewModel {
+  private func advanceToReviewing() async -> LogViewModel {
     let model = LogViewModel(
       parser: ConversationFoodParser(),
       provider: ConversationFoodProvider()
     )
     model.input = "two eggs"
     model.submit()
-    await waitUntil { model.stage == .choosing }
-    return model
-  }
-
-  private func advanceToReviewing() async -> LogViewModel {
-    let model = await advanceToChoosing()
-    guard let first = model.results.first else {
-      XCTFail("Expected search results")
-      return model
-    }
-    model.select(first)
+    // A single high-confidence hit auto-selects and resolves straight to review.
     await waitUntil { model.stage == .reviewing }
     return model
   }
 
   private func waitUntil(
-    timeout: Duration = .seconds(2),
+    timeout: Duration = .seconds(5),
     condition: @escaping @MainActor () -> Bool
   ) async {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: timeout)
+    // Poll with a real sleep rather than busy-spinning on Task.yield(): the
+    // pipeline runs off the main actor, and a tight yield loop can starve it.
     while !condition(), clock.now < deadline {
-      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(2))
     }
     XCTAssertTrue(condition(), "Timed out waiting for expected state")
   }
