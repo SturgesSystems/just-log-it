@@ -33,6 +33,19 @@ public struct ServingResolutionService: Sendable {
   public func resolve(_ parsed: ParsedFoodRequest, against food: FoodDetails)
     -> ServingResolutionOutcome
   {
+    // A fraction of a sized container is more specific than either number in isolation.
+    // For example, half of a 12-ounce bottle means 6 ounces consumed, not 0.5 ounce.
+    if let fraction = parsed.fractionOfWhole,
+      let containerSize = parsed.containerSize,
+      let containerUnit = parsed.containerSizeUnit,
+      let grams = grams(quantity: fraction * containerSize, unit: containerUnit)
+    {
+      let display =
+        parsed.quantityText
+        ?? "\(format(fraction)) of a \(format(containerSize)) \(containerUnit) container"
+      return resolveMass(grams, food: food, display: display)
+    }
+
     if let quantity = parsed.quantity, let unit = parsed.unit,
       let grams = grams(quantity: quantity, unit: unit)
     {

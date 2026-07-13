@@ -1,14 +1,77 @@
 import SwiftUI
 
+@MainActor
+@Observable
+final class HealthSyncSettingsModel {
+  private let writer: any HealthNutritionWriting
+  private let defaults: UserDefaults
+
+  private(set) var isEnabled: Bool
+  private(set) var isRequestingAccess = false
+  private(set) var message: String?
+
+  var isAvailable: Bool { writer.isAvailable }
+
+  init(
+    writer: any HealthNutritionWriting = HealthKitNutritionWriter.shared,
+    defaults: UserDefaults = .standard
+  ) {
+    self.writer = writer
+    self.defaults = defaults
+    isEnabled = defaults.bool(forKey: HealthSyncCoordinator.preferenceKey)
+  }
+
+  func setEnabled(_ enabled: Bool) async {
+    guard !isRequestingAccess else { return }
+
+    guard enabled else {
+      defaults.set(false, forKey: HealthSyncCoordinator.preferenceKey)
+      isEnabled = false
+      message = "New entries will stay in JustLogIt only. Existing Health data is unchanged."
+      return
+    }
+
+    guard writer.isAvailable else {
+      message = "Apple Health isn’t available on this device."
+      return
+    }
+
+    // Keep the durable preference off until the explicit authorization request succeeds.
+    isRequestingAccess = true
+    message = nil
+    defer { isRequestingAccess = false }
+
+    do {
+      let summary = try await writer.requestAuthorization()
+      guard summary.canWrite else {
+        defaults.set(false, forKey: HealthSyncCoordinator.preferenceKey)
+        isEnabled = false
+        message = "Write access wasn’t granted. You can review access in Settings."
+        return
+      }
+
+      defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+      isEnabled = true
+      message =
+        summary.authorizedNutrientCount == summary.requestedNutrientCount
+        ? "Ready to save supported nutrition from new entries."
+        : "Ready. Apple Health will save the nutrient types you allowed."
+    } catch {
+      defaults.set(false, forKey: HealthSyncCoordinator.preferenceKey)
+      isEnabled = false
+      message =
+        (error as? LocalizedError)?.errorDescription
+        ?? "Apple Health access couldn’t be requested."
+    }
+  }
+}
+
 struct SettingsView: View {
   private let configuration = AppConfiguration.current
-  private let healthWriter: any HealthNutritionWriting = HealthKitNutritionWriter.shared
 
   @State private var confirmsCacheClear = false
   @State private var cacheResultMessage: String?
-  @State private var healthMessage: String?
-  @State private var isRequestingHealthAccess = false
-  @AppStorage(HealthSyncCoordinator.preferenceKey) private var healthSyncEnabled = false
+  @State private var healthSettings = HealthSyncSettingsModel()
 
   var body: some View {
     List {
@@ -36,22 +99,22 @@ struct SettingsView: View {
       }
 
       Section {
-        Toggle(isOn: $healthSyncEnabled) {
+        Toggle(isOn: healthSyncBinding) {
           Label("Save nutrition to Apple Health", systemImage: "heart.fill")
         }
-        .disabled(!healthWriter.isAvailable || isRequestingHealthAccess)
+        .disabled(!healthSettings.isAvailable || healthSettings.isRequestingAccess)
         .accessibilityIdentifier("health-sync-toggle")
 
-        if isRequestingHealthAccess {
+        if healthSettings.isRequestingAccess {
           HStack {
             ProgressView()
             Text("Requesting access…")
           }
-        } else if !healthWriter.isAvailable {
+        } else if !healthSettings.isAvailable {
           Label("Apple Health isn’t available on this device.", systemImage: "info.circle")
             .foregroundStyle(.secondary)
-        } else if let healthMessage {
-          Text(healthMessage)
+        } else if let message = healthSettings.message {
+          Text(message)
             .font(.subheadline)
             .foregroundStyle(.secondary)
         }
@@ -90,14 +153,15 @@ struct SettingsView: View {
     } message: {
       Text(cacheResultMessage ?? "")
     }
-    .onChange(of: healthSyncEnabled) { _, enabled in
-      guard enabled else {
-        healthMessage =
-          "New entries will stay in JustLogIt only. Existing Health data is unchanged."
-        return
+  }
+
+  private var healthSyncBinding: Binding<Bool> {
+    Binding(
+      get: { healthSettings.isEnabled },
+      set: { enabled in
+        Task { await healthSettings.setEnabled(enabled) }
       }
-      requestHealthAuthorization()
-    }
+    )
   }
 
   private var versionDescription: String {
@@ -137,28 +201,4 @@ struct SettingsView: View {
     }
   }
 
-  private func requestHealthAuthorization() {
-    isRequestingHealthAccess = true
-    healthMessage = nil
-    Task {
-      do {
-        let summary = try await healthWriter.requestAuthorization()
-        if summary.canWrite {
-          healthMessage =
-            summary.authorizedNutrientCount == summary.requestedNutrientCount
-            ? "Ready to save supported nutrition from new entries."
-            : "Ready. Apple Health will save the nutrient types you allowed."
-        } else {
-          healthSyncEnabled = false
-          healthMessage = "Write access wasn’t granted. You can change access in Health settings."
-        }
-      } catch {
-        healthSyncEnabled = false
-        healthMessage =
-          (error as? LocalizedError)?.errorDescription
-          ?? "Apple Health access couldn’t be requested."
-      }
-      isRequestingHealthAccess = false
-    }
-  }
 }

@@ -36,6 +36,13 @@ protocol HealthNutritionWriting: Sendable {
     fdcID: Int?,
     nutrients: [NutrientAmount]
   ) async throws
+  func delete(entryID: UUID, version: Int) async throws
+}
+
+extension HealthNutritionWriting {
+  func delete(entryID: UUID, version: Int) async throws {
+    throw HealthKitWriteError.unavailable
+  }
 }
 
 actor HealthKitNutritionWriter: HealthNutritionWriting {
@@ -106,6 +113,19 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
     try await store.save(correlation)
   }
 
+  func delete(entryID: UUID, version _: Int) async throws {
+    guard isAvailable else { throw HealthKitWriteError.unavailable }
+
+    for target in HealthKitNutrientMapping.deletionTargets(entryID: entryID) {
+      let predicate = HKQuery.predicateForObjects(
+        withMetadataKey: HKMetadataKeySyncIdentifier,
+        operatorType: .equalTo,
+        value: target.syncIdentifier
+      )
+      _ = try await store.deleteObjects(of: target.type, predicate: predicate)
+    }
+  }
+
   private func authorizationSummary() -> HealthAuthorizationSummary {
     let authorized = HealthKitNutrientMapping.allQuantityTypes.filter {
       store.authorizationStatus(for: $0) == .sharingAuthorized
@@ -136,7 +156,18 @@ struct HealthKitNutrientMapping: Sendable {
   static let foodType = HKObjectType.correlationType(forIdentifier: .food)!
 
   static var allQuantityTypes: [HKQuantityType] {
-    NutrientKey.allCases.compactMap { HealthKitNutrientMapping($0)?.quantityType }
+    allMappings.map(\.quantityType)
+  }
+
+  static var allMappings: [HealthKitNutrientMapping] {
+    NutrientKey.allCases.compactMap(HealthKitNutrientMapping.init)
+  }
+
+  static func deletionTargets(entryID: UUID) -> [(type: HKObjectType, syncIdentifier: String)] {
+    [(foodType, "\(entryID.uuidString).food")]
+      + allMappings.map {
+        ($0.quantityType, "\(entryID.uuidString).\($0.key.rawValue)")
+      }
   }
 
   private static func identifier(for key: NutrientKey) -> HKQuantityTypeIdentifier? {

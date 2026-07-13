@@ -45,6 +45,9 @@ struct LogView: View {
       .scrollDismissesKeyboard(.interactively)
       .onChange(of: model.stage) { _, stage in
         resultsExpanded = false
+        if stage == .idle || stage == .parsing {
+          quantityMode = .servings
+        }
         if stage != .idle && stage != .failed && stage != .clarifying {
           focusedField = nil
         }
@@ -53,7 +56,8 @@ struct LogView: View {
         }
       }
     }
-    .navigationTitle("Log Food")
+    .navigationTitle("JustLogIt")
+    .navigationBarTitleDisplayMode(.inline)
     .safeAreaInset(edge: .bottom, spacing: 0) {
       actionDock
     }
@@ -161,7 +165,7 @@ struct LogView: View {
         }
       }
 
-      Label("Description interpreted on this device", systemImage: "lock.shield")
+      Label("Your food log stays on this iPhone", systemImage: "lock.shield")
         .font(.caption)
         .foregroundStyle(.secondary)
     }
@@ -406,9 +410,8 @@ struct LogView: View {
         .accessibilityIdentifier("status-message")
 
       HStack {
-        Button("Edit Description") {
-          model.cancel()
-          focusedField = .description
+        Button(recoveryActionTitle) {
+          performRecoveryAction()
         }
         Spacer()
         Button("Enter Manually") {
@@ -424,17 +427,41 @@ struct LogView: View {
   }
 
   private var recoveryTitle: String {
-    let message = model.message?.lowercased() ?? ""
-    if message.contains("no usda") || message.contains("no match") {
-      return "No Matches Found"
+    switch model.failureKind {
+    case .interpretation:
+      "Couldn’t Interpret That"
+    case .search:
+      "Couldn’t Reach USDA"
+    case .noResults:
+      "No Matches Found"
+    case .details:
+      "Couldn’t Load This Food"
+    case nil:
+      "Couldn’t Complete That"
     }
-    if message.contains("search") || message.contains("network") || message.contains("connect") {
-      return "Couldn’t Reach USDA"
+  }
+
+  private var recoveryActionTitle: String {
+    switch model.failureKind {
+    case .interpretation, nil:
+      "Edit Description"
+    case .search, .noResults:
+      "Edit Search"
+    case .details:
+      "Search Again"
     }
-    if message.contains("details") || message.contains("selected food") {
-      return "Couldn’t Load This Food"
+  }
+
+  private func performRecoveryAction() {
+    switch model.failureKind {
+    case .interpretation, nil:
+      model.cancel()
+      focusedField = .description
+    case .search, .noResults:
+      focusedField = .manualSearch
+    case .details:
+      searchManually()
     }
-    return "Couldn’t Interpret That"
   }
 
   @ViewBuilder
@@ -484,11 +511,12 @@ struct LogView: View {
         focusedField = nil
         model.showManualEntry = true
       } label: {
-        Image(systemName: "plus")
-          .frame(width: 32, height: 32)
+        Label("Manual", systemImage: "square.and.pencil")
+          .font(.subheadline.weight(.medium))
+          .frame(minHeight: 32)
       }
       .buttonStyle(.bordered)
-      .clipShape(.circle)
+      .controlSize(.small)
       .accessibilityLabel("Enter nutrition manually")
       .accessibilityIdentifier("manual-entry-button")
 

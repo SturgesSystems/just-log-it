@@ -55,6 +55,19 @@ final class LoggingFlowUITests: XCTestCase {
     XCTAssertTrue(app.buttons["continue-button"].isEnabled)
   }
 
+  func testFreshLogScreenHasOnePromptAndVisibleManualEntry() {
+    let app = launchApp()
+
+    XCTAssertTrue(app.navigationBars["JustLogIt"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["What did you eat?"].exists)
+    XCTAssertFalse(app.staticTexts["Log Food"].exists)
+    XCTAssertTrue(app.staticTexts["Your food log stays on this iPhone"].exists)
+
+    let manualEntry = app.buttons["manual-entry-button"]
+    XCTAssertTrue(manualEntry.exists)
+    XCTAssertEqual(manualEntry.label, "Enter nutrition manually")
+  }
+
   func testParserFailureShowsSingleRecoveryPath() {
     let app = launchApp(additionalArguments: ["-ui-testing-parser-failure"])
     let description = app.textFields["food-description"]
@@ -66,7 +79,10 @@ final class LoggingFlowUITests: XCTestCase {
     let recovery = app.textFields["manual-search"]
     XCTAssertTrue(recovery.waitForExistence(timeout: 5))
     XCTAssertFalse(app.textFields["food-description"].exists)
-    XCTAssertTrue(app.descendants(matching: .any)["recovery-title"].exists)
+    let recoveryTitle = app.descendants(matching: .any)["recovery-title"]
+    XCTAssertTrue(recoveryTitle.exists)
+    XCTAssertEqual(recoveryTitle.label, "Couldn’t Interpret That")
+    XCTAssertTrue(app.buttons["Edit Description"].exists)
     XCTAssertTrue(app.buttons["Search USDA"].isEnabled)
   }
 

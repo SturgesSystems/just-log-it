@@ -20,9 +20,9 @@ A person can describe one food naturally, identify the correct USDA match, resol
 - [x] SwiftData entry snapshots that survive source-data changes
 - [x] Entries list, detail, search, and deletion
 - [x] Local search/detail cache
-- [x] Minimal credential-shielding Worker with no request persistence
+- [x] Stateless credential-shielding Worker scaffold with no request persistence
 - [x] Domain unit tests and a representative mocked UI journey
-- [x] VoiceOver labels, Dynamic Type, dark mode, and keyboard usability
+- [ ] Complete VoiceOver, Dynamic Type, dark mode, and keyboard accessibility audit; baseline labels, scalable layouts, native dismissal, and focused UI coverage are implemented
 
 ## Not required for MVP
 
@@ -36,4 +36,4 @@ A person can describe one food naturally, identify the correct USDA match, resol
 
 ## Exit criteria
 
-The app builds with Xcode 27, runs on a physical iOS 27 phone, completes the primary logging flow without secrets in source, passes automated tests, and handles parser/network failure through a usable manual path.
+The app builds with Xcode 27, runs on a physical iOS 27 phone, completes the primary logging flow without secrets in source, passes automated tests, and handles parser/network failure through a usable manual path. Public launch still requires the production Worker deployment and the P1 accessibility/device audits.

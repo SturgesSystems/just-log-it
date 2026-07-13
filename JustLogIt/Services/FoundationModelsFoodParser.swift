@@ -2,6 +2,68 @@ import Foundation
 import FoundationModels
 import JustLogItCore
 
+#if DEBUG
+  import OSLog
+#endif
+
+#if DEBUG
+  enum AppPerformanceTrace {
+    private static let logger = Logger(
+      subsystem: Bundle.main.bundleIdentifier ?? "JustLogIt",
+      category: "Performance"
+    )
+    private static let signposter = OSSignposter(logger: logger)
+
+    static func measure<Value>(
+      _ name: StaticString,
+      operation: () throws -> Value
+    ) rethrows -> Value {
+      let started = ContinuousClock.now
+      let state = signposter.beginInterval(name)
+      do {
+        let value = try operation()
+        finish(name, state: state, started: started, outcome: "success")
+        return value
+      } catch {
+        finish(name, state: state, started: started, outcome: "failure")
+        throw error
+      }
+    }
+
+    static func measure<Value>(
+      _ name: StaticString,
+      isolation: isolated (any Actor)? = #isolation,
+      operation: () async throws -> Value
+    ) async rethrows -> Value {
+      let started = ContinuousClock.now
+      let state = signposter.beginInterval(name)
+      do {
+        let value = try await operation()
+        finish(name, state: state, started: started, outcome: "success")
+        return value
+      } catch {
+        finish(name, state: state, started: started, outcome: "failure")
+        throw error
+      }
+    }
+
+    private static func finish(
+      _ name: StaticString,
+      state: OSSignpostIntervalState,
+      started: ContinuousClock.Instant,
+      outcome: StaticString
+    ) {
+      signposter.endInterval(name, state)
+      let components = started.duration(to: .now).components
+      let milliseconds =
+        Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1_000_000_000_000_000
+      logger.debug(
+        "\(String(describing: name), privacy: .public) duration_ms=\(milliseconds, privacy: .public) outcome=\(String(describing: outcome), privacy: .public)"
+      )
+    }
+  }
+#endif
+
 enum FoodParserError: LocalizedError {
   case unavailable(String)
   case emptyInput
@@ -35,10 +97,16 @@ private struct GeneratedFoodDescription {
       "Concise suggested food database search terms without quantity or conversational filler.")
   var searchTerms: String
 
-  @Guide(description: "Primary numeric quantity after converting written numbers and fractions.")
+  @Guide(
+    description:
+      "Amount actually consumed after converting written numbers and fractions. For a fraction of a sized container, do not use the container's full size here; put the fraction, whole-item unit, and full size in their dedicated fields."
+  )
   var quantity: Double?
 
-  @Guide(description: "Unit for the primary quantity, singular when practical.")
+  @Guide(
+    description:
+      "Unit for quantity, singular when practical. It must describe the consumed quantity, not the full container size."
+  )
   var unit: String?
 
   @Guide(description: "Original human-readable quantity phrase.")
@@ -52,10 +120,16 @@ private struct GeneratedFoodDescription {
   @Guide(description: "Whole-item unit associated with fractionOfWhole, such as pizza or bottle.")
   var wholeUnit: String?
 
-  @Guide(description: "Explicit full container size, if stated.")
+  @Guide(
+    description:
+      "Explicit full container size before applying fractionOfWhole. Example: for half a 12-ounce bottle, this is 12."
+  )
   var containerSize: Double?
 
-  @Guide(description: "Unit for containerSize.")
+  @Guide(
+    description:
+      "Unit for the full containerSize. Example: for half a 12-ounce bottle, this is ounce."
+  )
   var containerSizeUnit: String?
 
   @Guide(description: "Second equivalent quantity explicitly supplied by the person.")
@@ -96,7 +170,12 @@ struct FoundationModelsFoodParser: FoodDescriptionParsing {
     guard !trimmed.isEmpty else { throw FoodParserError.emptyInput }
 
     let model = SystemLanguageModel.default
-    switch model.availability {
+    #if DEBUG
+      let availability = AppPerformanceTrace.measure("FM availability") { model.availability }
+    #else
+      let availability = model.availability
+    #endif
+    switch availability {
     case .available:
       break
     case .unavailable(.deviceNotEligible):
@@ -114,24 +193,57 @@ struct FoundationModelsFoodParser: FoodDescriptionParsing {
         "The on-device language model is unavailable. Search manually instead.")
     }
 
-    let session = LanguageModelSession(
+    #if DEBUG
+      let session = AppPerformanceTrace.measure("FM session creation") {
+        makeSession(model: model)
+      }
+    #else
+      let session = makeSession(model: model)
+    #endif
+    let options = GenerationOptions(
+      samplingMode: .greedy, temperature: 0, maximumResponseTokens: 500)
+    #if DEBUG
+      let response = try await AppPerformanceTrace.measure("FM respond") {
+        try await session.respond(
+          to: "Interpret this food description: \(trimmed)",
+          generating: GeneratedFoodDescription.self,
+          options: options
+        )
+      }
+    #else
+      let response = try await session.respond(
+        to: "Interpret this food description: \(trimmed)",
+        generating: GeneratedFoodDescription.self,
+        options: options
+      )
+    #endif
+    let generated = response.content
+    #if DEBUG
+      return try AppPerformanceTrace.measure("FM mapping") {
+        try map(generated, originalInput: trimmed)
+      }
+    #else
+      return try map(generated, originalInput: trimmed)
+    #endif
+  }
+
+  private func makeSession(model: SystemLanguageModel) -> LanguageModelSession {
+    LanguageModelSession(
       model: model,
       tools: [],
       instructions: """
-        Parse one principal food description for a USDA database lookup. Separate an explicit brand from the product name. Preserve flavor, crust, variety, cut, product line, preparation, and other lookup-critical descriptors. Convert written numbers and common fractions. Preserve two equivalent quantities when supplied. Never infer a brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or database record. An entire package is not automatically one serving. Mark multiple distinct foods and approximation language. Remove phrases such as 'I ate', meal context, and 'please log' from search terms.
+        Parse one principal food description for a USDA database lookup. Separate an explicit brand from the product name. Preserve flavor, crust, variety, cut, product line, preparation, and other lookup-critical descriptors. Convert written numbers and common fractions. Preserve two equivalent quantities when supplied. When a person eats a fraction of a container with an explicit full size, keep the fraction and full container size separate: for "half a 12-ounce bottle", fractionOfWhole is 0.5, wholeUnit is bottle, containerSize is 12, and containerSizeUnit is ounce; the consumed amount is 6 ounces, never 0.5 ounce. Never infer a brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or database record. An entire package is not automatically one serving. Mark multiple distinct foods and approximation language. Remove phrases such as 'I ate', meal context, and 'please log' from search terms.
         """
     )
-    let options = GenerationOptions(
-      samplingMode: .greedy, temperature: 0, maximumResponseTokens: 500)
-    let response = try await session.respond(
-      to: "Interpret this food description: \(trimmed)",
-      generating: GeneratedFoodDescription.self,
-      options: options
-    )
-    let generated = response.content
+  }
+
+  private func map(
+    _ generated: GeneratedFoodDescription,
+    originalInput: String
+  ) throws -> ParsedFoodRequest {
     let productName = generated.productName.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !productName.isEmpty else { throw FoodParserError.invalidResponse }
-    return ParsedFoodRequest(
+    let candidate = ParsedFoodRequest(
       brand: cleaned(generated.brand),
       productName: productName,
       searchTerms: generated.searchTerms,
@@ -150,6 +262,11 @@ struct FoundationModelsFoodParser: FoodDescriptionParsing {
       containsMultipleFoods: generated.containsMultipleFoods,
       ambiguityNotes: cleaned(generated.ambiguityNotes)
     )
+    let grounded = ParsedFoodRequestGrounder().ground(candidate, in: originalInput)
+    guard !grounded.productName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw FoodParserError.invalidResponse
+    }
+    return grounded
   }
 
   private func cleaned(_ value: String?) -> String? {

@@ -26,6 +26,7 @@ struct ManualEntryView: View {
   @State private var approximate = false
   @State private var errorMessage: String?
   @FocusState private var focusedField: Field?
+  private let numberParser = LocalizedNumberParser()
 
   init(onSaved: @escaping () -> Void = {}) {
     self.onSaved = onSaved
@@ -169,16 +170,7 @@ struct ManualEntryView: View {
   }
 
   private func parseNonnegative(_ text: String) -> Double? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    let groupingSeparator = Locale.current.groupingSeparator ?? ","
-    let decimalSeparator = Locale.current.decimalSeparator ?? "."
-    let normalized =
-      trimmed
-      .replacingOccurrences(of: groupingSeparator, with: "")
-      .replacingOccurrences(of: decimalSeparator, with: ".")
-    guard let value = Double(normalized), value.isFinite, value >= 0 else { return nil }
-    return value
+    numberParser.parse(text, minimum: .zero)
   }
 
   private func moveFocus(by offset: Int) {

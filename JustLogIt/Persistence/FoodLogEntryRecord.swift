@@ -25,6 +25,8 @@ final class FoodLogEntryRecord {
   var healthSyncVersion: Int = 1
   var healthSyncedAt: Date?
   var healthSyncError: String?
+  var healthSyncRetryCount: Int = 0
+  var healthSyncNextRetryAt: Date?
 
   init(
     id: UUID = UUID(),
@@ -96,6 +98,33 @@ enum HealthSyncStatus: String, Codable {
   case synced
   case denied
   case failed
+  case deletionPending
+}
+
+@Model
+final class HealthDeletionTombstone {
+  @Attribute(.unique) var entryID: UUID
+  var healthSyncVersion: Int
+  var createdAt: Date
+  var retryCount: Int
+  var nextRetryAt: Date?
+  var lastError: String?
+
+  init(
+    entryID: UUID,
+    healthSyncVersion: Int,
+    createdAt: Date = .now,
+    retryCount: Int = 0,
+    nextRetryAt: Date? = nil,
+    lastError: String? = nil
+  ) {
+    self.entryID = entryID
+    self.healthSyncVersion = healthSyncVersion
+    self.createdAt = createdAt
+    self.retryCount = retryCount
+    self.nextRetryAt = nextRetryAt
+    self.lastError = lastError
+  }
 }
 
 enum EntrySource: String, Codable, Sendable {

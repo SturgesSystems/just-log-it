@@ -48,6 +48,8 @@ The Debug build reads `USDA_API_KEY` through the checked-in Info.plist template.
 
 Apple Health sync is optional and off by default. Enabling it in Settings requests write-only access to food and dietary nutrient types. Confirmed entries are always saved locally first; a HealthKit denial or write failure never discards the JustLogIt entry.
 
+A denied or failed entry can expose **Try Apple Health Again**. That explicit tap may request write authorization and returns visible recovery guidance; background entry saving never presents the permission sheet.
+
 JustLogIt writes every USDA nutrient that has a semantically equivalent HealthKit dietary type. Added sugar remains local because HealthKit exposes total dietary sugar but no distinct added-sugar type.
 
 ## Tests
@@ -70,7 +72,7 @@ xcodebuild test -project JustLogIt.xcodeproj -scheme JustLogIt -destination 'pla
 - Food logs and nutrition snapshots are stored locally with SwiftData.
 - The app includes no advertising or analytics SDK.
 - Only deterministic USDA search terms are sent to the configured food-data service.
-- The minimal Worker is designed not to retain request bodies or user identifiers.
+- The repository includes a stateless Worker scaffold designed not to retain request bodies or user identifiers; deployed Cloudflare behavior must be audited separately.
 - Apple Health integration is optional, write-only, and disabled by default.
 
 See [Documentation/Privacy.md](Documentation/Privacy.md) for precise language and limitations.
@@ -82,3 +84,5 @@ See [Documentation/Privacy.md](Documentation/Privacy.md) for precise language an
 - Public privacy-policy and support URLs
 - Final screenshots and App Store metadata
 - Physical-device Foundation Models testing with the final iOS 27 release
+
+See [Documentation/Performance.md](Documentation/Performance.md) for DEBUG measurement markers and the physical-device performance gate.

@@ -10,13 +10,15 @@ struct JustLogItApp: App {
     do {
       let configuration = ModelConfiguration(
         isStoredInMemoryOnly: ProcessInfo.processInfo.arguments.contains("-ui-testing"))
-      container = try ModelContainer(for: FoodLogEntryRecord.self, configurations: configuration)
+      container = try ModelContainer(
+        for: FoodLogEntryRecord.self, HealthDeletionTombstone.self,
+        configurations: configuration)
       usesVolatileStore = false
     } catch {
       do {
         // A volatile store keeps manual logging usable if the persistent store is damaged.
         container = try ModelContainer(
-          for: FoodLogEntryRecord.self,
+          for: FoodLogEntryRecord.self, HealthDeletionTombstone.self,
           configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         usesVolatileStore = true

@@ -83,11 +83,13 @@ struct EntriesView: View {
     .alert(
       "Delete entry?", isPresented: deletionConfirmationPresented, presenting: entryPendingDeletion
     ) { entry in
-      Button("Delete", role: .destructive) { delete(entry) }
+      Button("Delete", role: .destructive) {
+        Task { await delete(entry) }
+      }
       Button("Cancel", role: .cancel) { entryPendingDeletion = nil }
     } message: { entry in
       Text(
-        "\u{201c}\(entry.displayName)\u{201d} will be removed from this device. This cannot be undone."
+        "\u{201c}\(entry.displayName)\u{201d} will be removed from JustLogIt and, if applicable, Apple Health. This cannot be undone."
       )
     }
     .alert("Couldn\u{2019}t delete entry", isPresented: deletionErrorPresented) {
@@ -118,14 +120,14 @@ struct EntriesView: View {
     )
   }
 
-  private func delete(_ entry: FoodLogEntryRecord) {
+  private func delete(_ entry: FoodLogEntryRecord) async {
     entryPendingDeletion = nil
-    modelContext.delete(entry)
-    do {
-      try modelContext.save()
-    } catch {
-      modelContext.rollback()
-      deletionError = "Your entry is still saved. Please try again."
+    let outcome = await HealthSyncCoordinator.deleteEntry(entry, modelContext: modelContext)
+    switch outcome {
+    case .deleted:
+      break
+    case .pending(let message), .failed(let message):
+      deletionError = message
     }
   }
 }
@@ -190,11 +192,14 @@ private struct EntryRow: View {
 private struct EntryDetailView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.openURL) private var openURL
 
   let entry: FoodLogEntryRecord
 
   @State private var confirmsDeletion = false
   @State private var deletionError: String?
+  @State private var healthRetryOutcome: HealthSyncOutcome?
+  @State private var isRetryingHealthSync = false
 
   var body: some View {
     List {
@@ -230,11 +235,18 @@ private struct EntryDetailView: View {
               .font(.subheadline)
               .foregroundStyle(.secondary)
           }
-          if entry.healthSyncStatus == .failed {
+          if entry.healthSyncStatus == .failed || entry.healthSyncStatus == .denied {
             Button("Try Apple Health Again", systemImage: "arrow.clockwise") {
-              Task {
-                await HealthSyncCoordinator.syncIfEnabled(entry, modelContext: modelContext)
+              retryHealthSync()
+            }
+            .disabled(isRetryingHealthSync)
+
+            if isRetryingHealthSync {
+              HStack {
+                ProgressView()
+                Text("Checking Apple Health access…")
               }
+              .foregroundStyle(.secondary)
             }
           }
         }
@@ -280,12 +292,27 @@ private struct EntryDetailView: View {
       Button("Delete", role: .destructive, action: deleteEntry)
       Button("Cancel", role: .cancel) {}
     } message: {
-      Text("This entry will be removed from this device. This cannot be undone.")
+      Text(
+        "This entry will be removed from JustLogIt and, if applicable, Apple Health. This cannot be undone."
+      )
     }
     .alert("Couldn\u{2019}t delete entry", isPresented: deletionErrorPresented) {
       Button("OK", role: .cancel) { deletionError = nil }
     } message: {
       Text(deletionError ?? "The entry could not be deleted.")
+    }
+    .alert("Apple Health", isPresented: healthRetryOutcomePresented) {
+      if healthRetryOutcome?.offersSettingsRecovery == true {
+        Button("Open Settings") {
+          if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
+          }
+          healthRetryOutcome = nil
+        }
+      }
+      Button("OK", role: .cancel) { healthRetryOutcome = nil }
+    } message: {
+      Text(healthRetryOutcome?.message ?? "Apple Health couldn’t be updated.")
     }
   }
 
@@ -307,6 +334,7 @@ private struct EntryDetailView: View {
     case .synced: "Saved"
     case .denied: "Access not granted"
     case .failed: "Needs attention"
+    case .deletionPending: "Deletion pending"
     }
   }
 
@@ -317,14 +345,31 @@ private struct EntryDetailView: View {
     )
   }
 
+  private var healthRetryOutcomePresented: Binding<Bool> {
+    Binding(
+      get: { healthRetryOutcome != nil },
+      set: { if !$0 { healthRetryOutcome = nil } }
+    )
+  }
+
+  private func retryHealthSync() {
+    isRetryingHealthSync = true
+    Task {
+      healthRetryOutcome = await HealthSyncCoordinator.retry(
+        entry, modelContext: modelContext)
+      isRetryingHealthSync = false
+    }
+  }
+
   private func deleteEntry() {
-    modelContext.delete(entry)
-    do {
-      try modelContext.save()
-      dismiss()
-    } catch {
-      modelContext.rollback()
-      deletionError = "Your entry is still saved. Please try again."
+    Task {
+      let outcome = await HealthSyncCoordinator.deleteEntry(entry, modelContext: modelContext)
+      switch outcome {
+      case .deleted:
+        dismiss()
+      case .pending(let message), .failed(let message):
+        deletionError = message
+      }
     }
   }
 }

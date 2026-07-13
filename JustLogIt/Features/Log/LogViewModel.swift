@@ -17,6 +17,13 @@ final class LogViewModel: ObservableObject {
     case failed
   }
 
+  enum FailureKind: Equatable {
+    case interpretation
+    case search
+    case noResults
+    case details
+  }
+
   @Published var input = ""
   @Published var manualSearchTerms = ""
   @Published private(set) var stage: Stage = .idle
@@ -27,6 +34,7 @@ final class LogViewModel: ObservableObject {
   @Published private(set) var resolution: ServingResolution?
   @Published private(set) var nutrients: [NutrientAmount] = []
   @Published private(set) var message: String?
+  @Published private(set) var failureKind: FailureKind?
   @Published var clarificationServings = ""
   @Published var clarificationGrams = ""
   @Published var showManualEntry = false
@@ -34,11 +42,19 @@ final class LogViewModel: ObservableObject {
   private let parser: any FoodDescriptionParsing
   private let provider: any FoodDataProviding
   private let queryBuilder = FoodSearchQueryBuilder()
+  private let resultRanker = FoodSearchResultRanker()
   private let resolver = ServingResolutionService()
   private let calculator = NutritionCalculator()
+  private let numberParser: LocalizedNumberParser
   private var operation: Task<Void, Never>?
+  private var operationGeneration: UInt = 0
 
-  init(parser: (any FoodDescriptionParsing)? = nil, provider: (any FoodDataProviding)? = nil) {
+  init(
+    parser: (any FoodDescriptionParsing)? = nil,
+    provider: (any FoodDataProviding)? = nil,
+    numberParser: LocalizedNumberParser = LocalizedNumberParser()
+  ) {
+    self.numberParser = numberParser
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-ui-testing")
     if let parser {
       self.parser = parser
@@ -61,29 +77,32 @@ final class LogViewModel: ObservableObject {
   }
 
   func submit() {
-    operation?.cancel()
+    let generation = beginOperation()
     operation = Task { [weak self] in
-      await self?.submitFlow()
+      await self?.submitFlow(generation: generation)
     }
   }
 
   func searchManually() {
-    operation?.cancel()
+    let generation = beginOperation()
     operation = Task { [weak self] in
-      await self?.manualSearchFlow()
+      await self?.manualSearchFlow(generation: generation)
     }
   }
 
   func select(_ result: FoodSearchResult) {
-    operation?.cancel()
+    let generation = beginOperation()
     selectedResult = result
     operation = Task { [weak self] in
-      await self?.selectionFlow(result)
+      await self?.selectionFlow(result, generation: generation)
     }
   }
 
   func resolveWithServings() {
-    guard let servings = Double(clarificationServings), let details else {
+    guard
+      let servings = numberParser.parse(clarificationServings, minimum: .greaterThanZero),
+      let details
+    else {
       message = "Enter a valid number of USDA servings."
       return
     }
@@ -91,7 +110,10 @@ final class LogViewModel: ObservableObject {
   }
 
   func resolveWithGrams() {
-    guard let grams = Double(clarificationGrams), let details else {
+    guard
+      let grams = numberParser.parse(clarificationGrams, minimum: .greaterThanZero),
+      let details
+    else {
       message = "Enter a valid gram amount."
       return
     }
@@ -134,7 +156,7 @@ final class LogViewModel: ObservableObject {
   }
 
   func reset() {
-    operation?.cancel()
+    invalidateOperation()
     input = ""
     manualSearchTerms = ""
     parsed = nil
@@ -144,89 +166,137 @@ final class LogViewModel: ObservableObject {
     resolution = nil
     nutrients = []
     message = nil
+    failureKind = nil
     clarificationServings = ""
     clarificationGrams = ""
     stage = .idle
   }
 
   func cancel() {
-    operation?.cancel()
+    invalidateOperation()
     stage = .idle
     message = nil
+    failureKind = nil
   }
 
-  private func submitFlow() async {
+  private func beginOperation() -> UInt {
+    invalidateOperation()
+    failureKind = nil
+    return operationGeneration
+  }
+
+  private func invalidateOperation() {
+    operation?.cancel()
+    operation = nil
+    operationGeneration &+= 1
+  }
+
+  private func isCurrentOperation(_ generation: UInt) -> Bool {
+    operationGeneration == generation && !Task.isCancelled
+  }
+
+  private func submitFlow(generation: UInt) async {
     let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
-      stage = .failed
-      message = "Enter a food description first."
+      fail(.interpretation, message: "Enter a food description first.")
       return
     }
     stage = .parsing
     message = nil
+    failureKind = nil
+    let parsed: ParsedFoodRequest
     do {
-      let parsed = try await parser.parse(text)
-      try Task.checkCancellation()
+      parsed = try await parser.parse(text)
+      guard isCurrentOperation(generation) else { return }
       self.parsed = parsed
       manualSearchTerms = queryBuilder.build(from: parsed).query
       if parsed.containsMultipleFoods {
         message =
           "This looks like multiple foods. This MVP will continue with the principal food only; the original text will be preserved."
       }
-      try await search(queryBuilder.build(from: parsed))
     } catch is CancellationError {
       return
     } catch {
+      guard isCurrentOperation(generation) else { return }
       manualSearchTerms = text
-      stage = .failed
-      message =
-        if let parserError = error as? FoodParserError {
-          parserError.errorDescription
-        } else {
-          "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
-        }
+      let failureMessage =
+        (error as? FoodParserError)?.errorDescription
+        ?? "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
+      fail(
+        .interpretation,
+        message: failureMessage
+      )
+      return
+    }
+
+    do {
+      try await search(
+        queryBuilder.build(from: parsed), rankingIntent: parsed, generation: generation)
+    } catch is CancellationError {
+      return
+    } catch {
+      guard isCurrentOperation(generation) else { return }
+      fail(
+        .search,
+        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
+      )
     }
   }
 
-  private func manualSearchFlow() async {
+  private func manualSearchFlow(generation: UInt) async {
     let request = queryBuilder.manual(manualSearchTerms)
     guard !request.query.isEmpty else {
-      stage = .failed
-      message = "Enter food search terms first."
+      fail(.search, message: "Enter food search terms first.")
       return
     }
     if parsed == nil {
       parsed = ParsedFoodRequest(productName: request.query, searchTerms: request.query)
     }
     do {
-      try await search(request)
+      let rankingIntent = ParsedFoodRequest(productName: request.query, searchTerms: request.query)
+      try await search(request, rankingIntent: rankingIntent, generation: generation)
     } catch is CancellationError {
       return
     } catch {
-      stage = .failed
-      message = (error as? LocalizedError)?.errorDescription ?? "Food search failed."
+      guard isCurrentOperation(generation) else { return }
+      fail(
+        .search,
+        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
+      )
     }
   }
 
-  private func search(_ request: FoodSearchRequest) async throws {
+  private func search(
+    _ request: FoodSearchRequest,
+    rankingIntent: ParsedFoodRequest,
+    generation: UInt
+  ) async throws {
     stage = .searching
-    let response = try await provider.search(request)
-    try Task.checkCancellation()
-    results = response.foods
+    #if DEBUG
+      let response = try await AppPerformanceTrace.measure("USDA search") {
+        try await provider.search(request)
+      }
+    #else
+      let response = try await provider.search(request)
+    #endif
+    guard isCurrentOperation(generation) else { return }
+    results = resultRanker.rank(response.foods, for: rankingIntent)
     if results.isEmpty {
-      stage = .failed
-      message = "No USDA foods matched. Edit the search or enter nutrition manually."
+      fail(
+        .noResults,
+        message: "No USDA foods matched. Edit the search or enter nutrition manually."
+      )
     } else {
       stage = .choosing
     }
   }
 
-  private func selectionFlow(_ result: FoodSearchResult) async {
+  private func selectionFlow(_ result: FoodSearchResult, generation: UInt) async {
     stage = .loadingDetails
     message = nil
     do {
       let details = try await provider.foodDetails(fdcID: result.fdcID)
-      try Task.checkCancellation()
+      guard isCurrentOperation(generation) else { return }
       self.details = details
       guard let parsed else {
         stage = .clarifying
@@ -237,11 +307,19 @@ final class LogViewModel: ObservableObject {
     } catch is CancellationError {
       return
     } catch {
-      stage = .failed
-      message =
-        (error as? LocalizedError)?.errorDescription
-        ?? "The selected food details could not be loaded."
+      guard isCurrentOperation(generation) else { return }
+      fail(
+        .details,
+        message: (error as? LocalizedError)?.errorDescription
+          ?? "The selected food details could not be loaded."
+      )
     }
+  }
+
+  private func fail(_ kind: FailureKind, message: String) {
+    failureKind = kind
+    self.message = message
+    stage = .failed
   }
 
   private func apply(_ outcome: ServingResolutionOutcome) {

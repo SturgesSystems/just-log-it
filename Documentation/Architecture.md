@@ -18,4 +18,12 @@ The Foundation Model may identify food, brand, descriptors, and quantity languag
 
 `Packages/JustLogItCore` has no SwiftUI, SwiftData, FoundationModels, or HealthKit dependency and can be tested from Command Line Tools.
 
-`HealthKitNutritionWriter` maps every supported USDA nutrient to its exact HealthKit dietary type and writes one food correlation. `HealthSyncCoordinator` keeps logging local-first and persists pending, synced, denied, or failed state on each entry. Authorization is requested only from the explicit Settings toggle, and the app requests write access only.
+`HealthKitNutritionWriter` maps every supported USDA nutrient to its exact HealthKit dietary type and writes one food correlation. `HealthSyncCoordinator` keeps logging local-first and persists pending, synced, denied, failed, or deletion-pending state. Authorization is requested only from explicit user actions: enabling sync in Settings or tapping **Try Apple Health Again** for a denied/failed entry. Automatic entry saving and reconciliation never present permission UI, and the app requests write access only.
+
+On launch and foreground activation, pending and retryable failed writes reconcile only while Health sync is enabled. Automatic retries use persisted bounded backoff. Deleting a synced entry first persists a tombstone containing its stable app-owned sync identity; the local entry remains until Health cleanup succeeds. Health deletion uses exact `HKMetadataKeySyncIdentifier` predicates for the correlation and nutrient samples, and HealthKit independently restricts deletion to objects saved by this app.
+
+The Cloudflare Worker directory is a stateless, credential-shielding scaffold with strict request validation, controlled outbound headers, and no application cache/database. It is not production infrastructure until it is deployed with an encrypted USDA secret and its Cloudflare logging, transforms, visitor metadata, privacy behavior, and operational limits are audited.
+
+The disk food cache is disposable acceleration, never entry history. Cache decode/expiry failure falls through to the configured provider, and the user can clear it without deleting logs. Corruption, disk-pressure, and migration recovery still require launch-level testing.
+
+DEBUG builds emit content-free signposts for Foundation Models availability, session creation, generation, deterministic mapping, and USDA search. Release builds contain no performance logger. See [`Performance.md`](Performance.md) for device measurement boundaries and thresholds.

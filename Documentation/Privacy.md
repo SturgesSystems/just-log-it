@@ -11,3 +11,5 @@ Recommended user-facing language:
 The App Store privacy response must be re-audited against the deployed Cloudflare and USDA behavior before submission.
 
 Apple Health sync is optional, write-only, and disabled by default. When enabled, confirmed nutrition is written directly from the device to the user’s Health store. JustLogIt does not read Health data. HealthKit permissions are controlled per nutrient type, and a denied or failed write does not remove the locally saved entry.
+
+When someone deletes a nutrition entry that JustLogIt previously saved to Apple Health, the app removes only Health objects carrying that entry’s exact JustLogIt sync identifiers. If Health cleanup fails, the local entry and a local retry tombstone remain until cleanup can be retried; JustLogIt never queries or deletes another app’s nutrition records.
