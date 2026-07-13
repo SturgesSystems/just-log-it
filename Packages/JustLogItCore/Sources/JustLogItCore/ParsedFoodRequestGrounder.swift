@@ -34,8 +34,56 @@ public struct ParsedFoodRequestGrounder: Sendable {
 
     result.isApproximate = candidate.isApproximate && evidence.containsApproximation
     result.containsMultipleFoods = candidate.containsMultipleFoods && evidence.containsConjunction
+    // Components must appear in the source (or as product intent tokens).
+    result.componentNames = candidate.componentNames
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .filter { evidence.containsPhrase($0) || evidence.containsProductIntent($0) }
+    // Free-form notes only survive when their wording is source-grounded (anti-contamination).
     result.ambiguityNotes = groundedPhrase(candidate.ambiguityNotes, evidence: evidence)
+
+    // Clarification fields are model judgments for the policy/UI layer — not source phrases.
+    // Keep them. Do not invent or rewrite the prompt. Only drop detail flags contradicted
+    // by facts that survived grounding; leave the prompt unless every detail flag cleared
+    // *and* identity/multi-food no longer need a question.
+    result.quantityNeedsClarification = candidate.quantityNeedsClarification
+    result.preparationNeedsClarification = candidate.preparationNeedsClarification
+    result.clarificationPrompt = cleanedOptional(candidate.clarificationPrompt)
+    result.clarificationSuggestions = candidate.clarificationSuggestions
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+
+    if result.quantity != nil || result.fractionOfWhole != nil {
+      result.quantityNeedsClarification = false
+    }
+    if result.preparation != nil {
+      result.preparationNeedsClarification = false
+    }
+
+    let hasIdentity = !result.productName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // Amount/prep only make sense once a real food is known.
+    if !hasIdentity {
+      result.quantityNeedsClarification = false
+      result.preparationNeedsClarification = false
+    }
+
+    // If the model still has nothing to ask and identity is ready, drop leftover prompt.
+    let stillNeedsSoftClarify =
+      result.quantityNeedsClarification
+      || result.preparationNeedsClarification
+      || !hasIdentity
+      || result.containsMultipleFoods
+    if !stillNeedsSoftClarify {
+      result.clarificationPrompt = nil
+      result.clarificationSuggestions = []
+    }
     return result
+  }
+
+  private func cleanedOptional(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   private func groundedPhrase(_ phrase: String?, evidence: SourceEvidence) -> String? {
@@ -68,7 +116,7 @@ private struct SourceEvidence {
       || !Set(tokens).isDisjoint(
         with: [
           "about", "almost", "approx", "approximate", "approximately", "around", "circa",
-          "nearly", "roughly",
+          "nearly", "roughly", "few", "some", "several", "couple", "handful", "many", "lots",
         ])
   }
 

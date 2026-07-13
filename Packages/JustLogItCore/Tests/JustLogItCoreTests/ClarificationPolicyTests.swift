@@ -46,24 +46,38 @@ import Testing
   #expect(draft.ambiguities.contains(.missingQuantity))
 }
 
-// MARK: - Empty identity
+// MARK: - Empty identity (model-authored prompt required for soft clarify)
 
-@Test func emptyProductRequiresEditAndNeverProceeds() {
-  let parsed = ParsedFoodRequest(productName: "", searchTerms: "")
-  let draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "???")
+@Test func emptyProductWithModelPromptClarifiesAndNeverProceeds() {
+  let parsed = ParsedFoodRequest(
+    productName: "",
+    searchTerms: "",
+    clarificationPrompt: "I’m sure it was! What did you eat?"
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed, sourceText: "I ate something yummy")
   let decision = ClarificationPolicy().decide(draft)
 
-  switch decision {
-  case .requireEdit, .fallbackManual:
-    break
-  case .proceed:
-    Issue.record("Empty identity must never proceed to USDA")
-  case .clarify:
-    Issue.record("Empty identity should requireEdit, not clarify: \(decision)")
+  guard case .clarify(let question) = decision else {
+    Issue.record("Empty identity with model prompt should clarify, got \(decision)")
+    return
   }
-
+  #expect(question.code == .emptyIdentity)
+  #expect(question.prompt == "I’m sure it was! What did you eat?")
+  #expect(question.allowsFreeform)
   #expect(draft.ambiguities.contains(.emptyIdentity))
   #expect(!draft.hasIdentity)
+}
+
+@Test func emptyProductWithoutModelPromptRequiresEdit() {
+  let parsed = ParsedFoodRequest(productName: "", searchTerms: "")
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed, sourceText: "I ate something yummy")
+  let decision = ClarificationPolicy().decide(draft)
+  guard case .requireEdit = decision else {
+    Issue.record("Empty identity without model prompt should requireEdit, got \(decision)")
+    return
+  }
 }
 
 @Test func whitespaceOnlyProductIsEmptyIdentity() {
@@ -74,27 +88,71 @@ import Testing
 
   let decision = ClarificationPolicy().decide(draft)
   guard case .requireEdit = decision else {
-    Issue.record("Expected requireEdit for whitespace identity, got \(decision)")
+    Issue.record("Whitespace identity without model prompt should requireEdit, got \(decision)")
     return
   }
 }
 
 // MARK: - Multiple foods
 
-@Test func multipleFoodsClarifiesAndDoesNotProceed() {
+@Test func multipleFoodsWithComponentNamesBeginsComposite() {
+  let parsed = ParsedFoodRequest(
+    productName: "cereal with milk",
+    searchTerms: "cereal milk",
+    containsMultipleFoods: true,
+    componentNames: ["cereal", "milk"]
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "I had a bowl of cereal with milk"
+  )
+  let decision = ClarificationPolicy().decide(draft)
+
+  guard case .beginComposite(let names, let source) = decision else {
+    Issue.record("Expected beginComposite for multi-item meal, got \(decision)")
+    return
+  }
+  #expect(names.map { $0.lowercased() }.contains("cereal"))
+  #expect(names.map { $0.lowercased() }.contains("milk"))
+  #expect(source.lowercased().contains("cereal"))
+}
+
+@Test func cerealWithMilkInferredAsCompositeEvenWithoutModelFlag() {
+  // When the model forgets multi flags, source "X with Y" should still start a composite.
+  let parsed = ParsedFoodRequest(
+    productName: "Frosted Flakes",
+    searchTerms: "Frosted Flakes"
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "A bowl of Frosted Flakes with nonfat milk"
+  )
+  let decision = ClarificationPolicy().decide(draft)
+  guard case .beginComposite(let names, _) = decision else {
+    Issue.record("Expected inferred composite for cereal with milk, got \(decision)")
+    return
+  }
+  #expect(names.count >= 2)
+  #expect(names.joined(separator: " ").lowercased().contains("milk"))
+}
+
+@Test func multipleFoodsWithModelPromptClarifiesAndDoesNotProceed() {
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
     searchTerms: "eggs and bacon",
-    containsMultipleFoods: true
+    containsMultipleFoods: true,
+    clarificationPrompt: "It looks like more than one food. Which one do you want to log?",
+    clarificationSuggestions: ["eggs", "bacon"]
   )
   let draft = FoodInterpretationValidator().draft(
     from: parsed,
     sourceText: "eggs and bacon"
   )
+  // Without componentNames, multi still needs a which-one / freeform clarify.
   let decision = ClarificationPolicy().decide(draft)
 
   guard case .clarify(let question) = decision else {
-    Issue.record("Expected clarify for multiple foods, got \(decision)")
+    Issue.record("Expected clarify for multiple foods without components, got \(decision)")
     return
   }
   #expect(question.code == .multipleFoods)
@@ -104,7 +162,9 @@ import Testing
 @Test func answeringMultipleFoodsSelectsSingleIdentity() {
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
-    containsMultipleFoods: true
+    containsMultipleFoods: true,
+    clarificationPrompt: "Which one?",
+    clarificationSuggestions: ["eggs", "bacon"]
   )
   let draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "eggs and bacon")
   guard case .clarify(let question) = ClarificationPolicy().decide(draft) else {
@@ -118,7 +178,9 @@ import Testing
   #expect(updated.turnCount == 1)
   #expect(updated.productName.confidence == .high)
   #expect(updated.productName.confidence != .confirmed)
+  #expect(updated.clarificationPrompt == nil)
 
+  // After answer clears model prompt, single identity proceeds pre-USDA.
   let decision = ClarificationPolicy().decide(updated)
   guard case .proceed(let request) = decision else {
     Issue.record("Expected proceed after single-food answer, got \(decision)")
@@ -209,7 +271,8 @@ import Testing
 @Test func afterTwoTurnsWithMultipleFoodsStillSetFallsBackManual() {
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
-    containsMultipleFoods: true
+    containsMultipleFoods: true,
+    clarificationPrompt: "Which food?"
   )
   var draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "eggs and bacon")
   draft.turnCount = 2
@@ -225,7 +288,8 @@ import Testing
 @Test func underMaxTurnsStillClarifiesMultipleFoods() {
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
-    containsMultipleFoods: true
+    containsMultipleFoods: true,
+    clarificationPrompt: "Which food?"
   )
   var draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "eggs and bacon")
   draft.turnCount = 1
@@ -236,6 +300,7 @@ import Testing
     return
   }
   #expect(question.code == .multipleFoods)
+  #expect(question.prompt == "Which food?")
 }
 
 @Test func maxTurnsWithResolvedDraftProceeds() {
@@ -356,11 +421,13 @@ import Testing
   #expect(checked > 0, "Expected to find Swift sources under \(sourcesRoot.path)")
 }
 
-@Test func multipleFoodsClarificationIncludesSplitSuggestions() {
+@Test func multipleFoodsClarificationUsesModelSuggestionsOnly() {
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
     searchTerms: "eggs and bacon",
-    containsMultipleFoods: true
+    containsMultipleFoods: true,
+    clarificationPrompt: "Which one do you want to log?",
+    clarificationSuggestions: ["eggs", "bacon"]
   )
   let draft = FoodInterpretationValidator().draft(
     from: parsed,
@@ -373,9 +440,8 @@ import Testing
     return
   }
   #expect(question.code == .multipleFoods)
-  #expect(question.suggestedAnswers.count >= 2)
-  #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("eggs"))
-  #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("bacon"))
+  #expect(question.prompt == "Which one do you want to log?")
+  #expect(question.suggestedAnswers == ["eggs", "bacon"])
 }
 
 @Test func quantityQuestionFactoryIncludesServingAndGramSuggestions() {
@@ -389,4 +455,140 @@ import Testing
   #expect(question.suggestedAnswers.contains("1 serving"))
   #expect(question.suggestedAnswers.contains("50 g"))
   #expect(question.suggestedAnswers.contains("100 g"))
+}
+
+// MARK: - Model-driven quantity / preparation clarification
+
+@Test func modelFlagsDriveClarifyAndPreferModelPrompt() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs",
+    searchTerms: "eggs",
+    isApproximate: true,
+    quantityNeedsClarification: true,
+    preparationNeedsClarification: true,
+    clarificationPrompt: "Sounds great — how many were they, and how were they cooked?"
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "I had a few eggs"
+  )
+  let decision = ClarificationPolicy().decide(draft)
+
+  guard case .clarify(let question) = decision else {
+    Issue.record("Expected clarify when model flags detail gaps, got \(decision)")
+    return
+  }
+  #expect(question.code == .missingQuantity)
+  #expect(question.prompt == "Sounds great — how many were they, and how were they cooked?")
+  #expect(question.allowsFreeform)
+}
+
+@Test func answeringModelDetailQuestionClearsFlagsAndProceeds() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs",
+    searchTerms: "eggs",
+    quantityNeedsClarification: true,
+    preparationNeedsClarification: true,
+    clarificationPrompt: "How many, and how cooked?"
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "I had a few eggs"
+  )
+  guard case .clarify(let question) = ClarificationPolicy().decide(draft) else {
+    Issue.record("Expected initial clarify")
+    return
+  }
+
+  let updated = ClarificationPolicy().applyUserAnswer("3 scrambled", to: draft, for: question)
+  #expect(updated.quantity?.value == 3)
+  #expect(updated.preparation?.value == "scrambled")
+  #expect(!updated.quantityNeedsClarification)
+  #expect(!updated.preparationNeedsClarification)
+  #expect(updated.turnCount == 1)
+
+  let decision = ClarificationPolicy().decide(updated)
+  guard case .proceed(let request) = decision else {
+    Issue.record("Expected proceed after user detail answer, got \(decision)")
+    return
+  }
+  #expect(request.quantity == 3)
+  #expect(request.preparation == "scrambled")
+  #expect(request.searchTerms.lowercased().contains("scrambled"))
+}
+
+@Test func preparationOnlyModelFlagUsesPrepCode() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs",
+    searchTerms: "eggs",
+    quantity: 2,
+    unit: "egg",
+    preparationNeedsClarification: true,
+    clarificationPrompt: "How were they cooked?"
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "I had 2 eggs"
+  )
+  let decision = ClarificationPolicy().decide(draft)
+  guard case .clarify(let question) = decision else {
+    Issue.record("Expected prep clarify from model flag, got \(decision)")
+    return
+  }
+  #expect(question.code == .uncertainPreparation)
+  #expect(question.prompt == "How were they cooked?")
+}
+
+@Test func noModelFlagsMeansIdentityAloneProceeds() {
+  // Policy must not invent food-type rules when the model left flags false.
+  let parsed = ParsedFoodRequest(productName: "eggs", searchTerms: "eggs")
+  let draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "I had eggs")
+  guard case .proceed = ClarificationPolicy().decide(draft) else {
+    Issue.record("Without model flags, identity-only draft should proceed")
+    return
+  }
+
+  let banana = FoodInterpretationValidator().draft(
+    from: ParsedFoodRequest(productName: "banana", searchTerms: "banana"),
+    sourceText: "I had a banana"
+  )
+  guard case .proceed = ClarificationPolicy().decide(banana) else {
+    Issue.record("Banana without flags should proceed pre-USDA")
+    return
+  }
+}
+
+@Test func grounderKeepsModelClarificationFlagsWhenQuantityAbsent() {
+  let candidate = ParsedFoodRequest(
+    productName: "eggs",
+    searchTerms: "eggs",
+    isApproximate: true,
+    quantityNeedsClarification: true,
+    preparationNeedsClarification: true,
+    clarificationPrompt: "How many and how cooked?"
+  )
+  let grounded = ParsedFoodRequestGrounder().ground(candidate, in: "I had a few eggs")
+  #expect(grounded.productName.lowercased().contains("egg"))
+  #expect(grounded.quantityNeedsClarification)
+  #expect(grounded.preparationNeedsClarification)
+  #expect(grounded.clarificationPrompt == "How many and how cooked?")
+}
+
+@Test func grounderClearsQuantityFlagWhenConcreteQuantitySurvives() {
+  let candidate = ParsedFoodRequest(
+    productName: "eggs",
+    searchTerms: "eggs",
+    quantity: 2,
+    unit: "egg",
+    preparation: "scrambled",
+    quantityNeedsClarification: true,
+    preparationNeedsClarification: true,
+    clarificationPrompt: "unused"
+  )
+  let grounded = ParsedFoodRequestGrounder().ground(candidate, in: "2 scrambled eggs")
+  #expect(grounded.quantity == 2)
+  #expect(grounded.preparation == "scrambled")
+  #expect(!grounded.quantityNeedsClarification)
+  #expect(!grounded.preparationNeedsClarification)
+  #expect(grounded.clarificationPrompt == nil)
 }

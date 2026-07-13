@@ -27,6 +27,13 @@ final class FoodLogEntryRecord {
   var healthSyncError: String?
   var healthSyncRetryCount: Int = 0
   var healthSyncNextRetryAt: Date?
+  /// Link to the recognized food identity created/updated when this entry was saved.
+  var recognizedFoodID: UUID?
+  /// True when this entry is an aggregated multi-component meal.
+  /// Optional for lightweight migration from stores that predate composites.
+  var isComposite: Bool?
+  /// Encoded `[CompositeComponentSnapshot]` when composite is true.
+  var componentPayload: Data?
 
   init(
     id: UUID = UUID(),
@@ -45,7 +52,10 @@ final class FoodLogEntryRecord {
     calculationBasis: CalculationBasis,
     servingMultiplier: Double? = nil,
     consumedGrams: Double? = nil,
-    nutrients: [NutrientAmount]
+    nutrients: [NutrientAmount],
+    recognizedFoodID: UUID? = nil,
+    isComposite: Bool = false,
+    components: [CompositeComponentSnapshot]? = nil
   ) throws {
     self.id = id
     self.createdAt = createdAt
@@ -64,6 +74,18 @@ final class FoodLogEntryRecord {
     self.servingMultiplier = servingMultiplier
     self.consumedGrams = consumedGrams
     nutrientsData = try JSONEncoder().encode(nutrients)
+    self.recognizedFoodID = recognizedFoodID
+    if let components, !components.isEmpty {
+      componentPayload = try JSONEncoder().encode(components)
+      self.isComposite = true
+    } else {
+      componentPayload = nil
+      self.isComposite = isComposite ? true : false
+    }
+  }
+
+  var isCompositeEntry: Bool {
+    isComposite == true || !components.isEmpty
   }
 
   var source: EntrySource {
@@ -76,6 +98,24 @@ final class FoodLogEntryRecord {
 
   var nutrients: [NutrientAmount] {
     (try? JSONDecoder().decode([NutrientAmount].self, from: nutrientsData)) ?? []
+  }
+
+  /// Decoded composite components; empty when not a composite or payload is corrupt.
+  var components: [CompositeComponentSnapshot] {
+    get {
+      guard let componentPayload else { return [] }
+      return (try? JSONDecoder().decode([CompositeComponentSnapshot].self, from: componentPayload))
+        ?? []
+    }
+    set {
+      if newValue.isEmpty {
+        componentPayload = nil
+        isComposite = false
+      } else {
+        componentPayload = try? JSONEncoder().encode(newValue)
+        isComposite = true
+      }
+    }
   }
 
   var calories: Double? {

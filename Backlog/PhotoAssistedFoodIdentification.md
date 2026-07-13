@@ -74,8 +74,14 @@ No original or derivative image is uploaded to USDA, Cloudflare, analytics, cras
 
 ### Phase 1 — Picker and one-food proposal
 
-- Ship PhotosPicker before camera if it reduces permission and lifecycle risk.
-- Support one image, one proposed food, optional user caption, clarification, and text fallback.
+- [x] Ship PhotosPicker before camera if it reduces permission and lifecycle risk.
+- [x] Scaffold `FoundationModelsImageFoodProposer` (availability-gated; image Attachment + guided generation when FoundationModels is present).
+- [x] Wire PhotosPicker near Manual in the log composer; load selected image data and call proposer.
+- [x] `LogViewModel.proposeFromImage` maps proposal → `photoObservation` evidence → clarification/search flow.
+- [x] On model/API unavailability, show a friendly message and keep the text path.
+- [ ] Device spike validation of structured-output accuracy, orientation, HEIC/JPEG, and latency budgets (Phase 0).
+- [ ] Support one image, one proposed food, optional user caption, clarification, and text fallback — end-to-end on eligible hardware.
+- [ ] Fixture tests for EXIF orientation, corrupt assets, cancellation, and text fallback.
 
 ### Phase 2 — Camera and multiple visible foods
 

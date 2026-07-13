@@ -66,7 +66,7 @@ describe("routing and validation", () => {
     vi.stubGlobal("fetch", upstream);
     for (const body of [
       { query: "apple", unexpected: true },
-      { query: "apple", pageSize: 26 },
+      { query: "apple", pageSize: 51 },
       { query: "apple", dataTypes: ["Not real"] },
     ]) {
       const response = await worker.fetch(
@@ -109,7 +109,7 @@ describe("USDA proxying", () => {
           query: "  greek   yogurt ",
           dataTypes: ["Branded", "Foundation"],
           page: 2,
-          pageSize: 25,
+          pageSize: 50,
         }),
       }),
       makeEnv(),
@@ -130,7 +130,7 @@ describe("USDA proxying", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       query: "greek yogurt",
       pageNumber: 2,
-      pageSize: 25,
+      pageSize: 50,
       dataType: ["Branded", "Foundation"],
     });
   });

@@ -52,7 +52,12 @@ public struct FoodInterpretationValidator: Sendable {
       descriptors: fact(parsed.descriptors),
       isApproximate: parsed.isApproximate,
       containsMultipleFoods: parsed.containsMultipleFoods,
-      ambiguityNotes: parsed.ambiguityNotes
+      ambiguityNotes: parsed.ambiguityNotes,
+      componentNames: parsed.componentNames,
+      quantityNeedsClarification: parsed.quantityNeedsClarification,
+      preparationNeedsClarification: parsed.preparationNeedsClarification,
+      clarificationPrompt: parsed.clarificationPrompt,
+      clarificationSuggestions: parsed.clarificationSuggestions
     )
 
     // Grounded nonempty product identity is high when directly stated (post-grounding).

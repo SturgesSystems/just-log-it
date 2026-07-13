@@ -5,56 +5,85 @@ import XCTest
 
 @MainActor
 final class LogViewModelClarificationPolicyTests: XCTestCase {
-  func testEmptyProductDoesNotSearchAndFailsInterpretation() async {
+  func testEmptyProductWithModelPromptDoesNotSearch() async {
     let provider = SearchCountingFoodProvider()
     let model = LogViewModel(
       parser: FixedFoodParser(
-        result: ParsedFoodRequest(productName: "", searchTerms: "")
+        result: ParsedFoodRequest(
+          productName: "",
+          searchTerms: "",
+          clarificationPrompt: "What did you eat?"
+        )
       ),
       provider: provider
     )
     model.input = "???"
 
     model.submit()
-    await waitUntil { model.stage == .failed }
+    await waitUntil { model.stage == .awaitingClarification }
 
-    XCTAssertEqual(model.failureKind, .interpretation)
-    XCTAssertEqual(
-      model.message,
-      "Enter a food name to search. Empty identity cannot proceed to USDA."
-    )
-    XCTAssertEqual(model.manualSearchTerms, "???")
-    XCTAssertNil(model.activeQuestion)
+    XCTAssertEqual(model.stage, .awaitingClarification)
+    XCTAssertNil(model.failureKind)
+    XCTAssertEqual(model.activeQuestion?.code, .emptyIdentity)
+    XCTAssertEqual(model.activeQuestion?.prompt, "What did you eat?")
     let emptySearchCalls = await provider.searchCalls
     XCTAssertEqual(emptySearchCalls, 0)
   }
 
-  func testWhitespaceOnlyProductDoesNotSearch() async {
+  func testSomethingYummyUsesModelPromptWithoutSearching() async {
     let provider = SearchCountingFoodProvider()
     let model = LogViewModel(
       parser: FixedFoodParser(
-        result: ParsedFoodRequest(productName: "   ", searchTerms: "   ")
+        result: ParsedFoodRequest(
+          productName: "",
+          searchTerms: "",
+          clarificationPrompt: "I’m sure it was! What did you eat?"
+        )
       ),
       provider: provider
     )
-    model.input = "   banana"
+    model.input = "I ate something yummy"
 
     model.submit()
-    await waitUntil { model.stage == .failed }
+    await waitUntil { model.stage == .awaitingClarification }
 
-    XCTAssertEqual(model.failureKind, .interpretation)
+    XCTAssertEqual(model.stage, .awaitingClarification)
+    XCTAssertNil(model.failureKind)
+    XCTAssertEqual(model.activeQuestion?.prompt, "I’m sure it was! What did you eat?")
+    let searchCalls = await provider.searchCalls
+    XCTAssertEqual(searchCalls, 0)
+  }
+
+  func testWhitespaceOnlyInputDoesNotSearch() async {
+    let provider = SearchCountingFoodProvider()
+    let model = LogViewModel(
+      parser: FixedFoodParser(
+        result: ParsedFoodRequest(productName: "banana", searchTerms: "banana")
+      ),
+      provider: provider
+    )
+    model.input = "   "
+
+    model.submit()
+    await waitUntil {
+      model.stage == .failed || model.stage == .idle || model.stage == .choosing
+    }
+
+    // Empty / whitespace-only input should not search USDA.
     let whitespaceSearchCalls = await provider.searchCalls
     XCTAssertEqual(whitespaceSearchCalls, 0)
   }
 
-  func testMultipleFoodsPresentsClarificationWithoutSearching() async {
+  func testMultipleFoodsPresentsModelClarificationWithoutSearching() async {
     let provider = SearchCountingFoodProvider()
     let model = LogViewModel(
       parser: FixedFoodParser(
         result: ParsedFoodRequest(
           productName: "eggs and bacon",
           searchTerms: "eggs and bacon",
-          containsMultipleFoods: true
+          containsMultipleFoods: true,
+          clarificationPrompt: "It looks like more than one food. Which one do you want to log?",
+          clarificationSuggestions: ["eggs", "bacon"]
         )
       ),
       provider: provider
@@ -71,8 +100,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
       "It looks like more than one food. Which one do you want to log?"
     )
     XCTAssertEqual(model.activeQuestion?.code, .multipleFoods)
+    XCTAssertEqual(model.activeQuestion?.suggestedAnswers, ["eggs", "bacon"])
     XCTAssertEqual(model.message, model.activeQuestion?.prompt)
-    XCTAssertEqual(model.manualSearchTerms, "eggs and bacon")
     XCTAssertNil(model.parsed)
     let multiFoodSearchCalls = await provider.searchCalls
     XCTAssertEqual(multiFoodSearchCalls, 0)
@@ -97,13 +126,22 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
       )
     )
     let model = LogViewModel(
-      parser: FixedFoodParser(
-        result: ParsedFoodRequest(
+      parser: ScriptedFoodParser(results: [
+        ParsedFoodRequest(
           productName: "eggs and bacon",
           searchTerms: "eggs and bacon",
-          containsMultipleFoods: true
-        )
-      ),
+          containsMultipleFoods: true,
+          clarificationPrompt: "Which one?",
+          clarificationSuggestions: ["eggs", "bacon"]
+        ),
+        ParsedFoodRequest(
+          productName: "scrambled eggs",
+          searchTerms: "scrambled eggs",
+          quantity: 2,
+          unit: "egg",
+          preparation: "scrambled"
+        ),
+      ]),
       provider: provider
     )
     model.input = "eggs and bacon"
@@ -123,6 +161,108 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(searchCalls, 1)
   }
 
+  func testModelFlaggedVagueAmountClarifiesWithoutSearching() async {
+    let provider = SearchCountingFoodProvider(
+      searchResponse: FoodSearchResponse(
+        foods: [
+          FoodSearchResult(
+            fdcID: 1123,
+            description: "Egg, whole, cooked, scrambled",
+            dataType: "Survey (FNDDS)",
+            servingSize: 100,
+            servingSizeUnit: "g",
+            householdServing: "1 large"
+          )
+        ],
+        totalHits: 1,
+        currentPage: 1,
+        totalPages: 1
+      )
+    )
+    let model = LogViewModel(
+      parser: ScriptedFoodParser(results: [
+        ParsedFoodRequest(
+          productName: "eggs",
+          searchTerms: "eggs",
+          isApproximate: true,
+          quantityNeedsClarification: true,
+          preparationNeedsClarification: true,
+          clarificationPrompt: "Sounds great — how many were they, and how were they cooked?"
+        ),
+        ParsedFoodRequest(
+          productName: "eggs",
+          searchTerms: "scrambled eggs",
+          quantity: 3,
+          unit: "egg",
+          preparation: "scrambled"
+        ),
+      ]),
+      provider: provider
+    )
+    model.input = "I had a few eggs"
+
+    model.submit()
+    await waitUntil { model.stage == .awaitingClarification }
+
+    XCTAssertEqual(model.stage, .awaitingClarification)
+    XCTAssertEqual(model.activeQuestion?.code, .missingQuantity)
+    XCTAssertEqual(
+      model.activeQuestion?.prompt,
+      "Sounds great — how many were they, and how were they cooked?"
+    )
+    XCTAssertNil(model.failureKind)
+    let searchCalls = await provider.searchCalls
+    XCTAssertEqual(searchCalls, 0)
+
+    model.clarificationAnswer = "3 scrambled"
+    model.submitClarificationAnswer()
+    await waitUntil { model.stage == .choosing }
+
+    let afterAnswerCalls = await provider.searchCalls
+    XCTAssertEqual(afterAnswerCalls, 1)
+    XCTAssertEqual(model.parsed?.quantity, 3)
+    XCTAssertEqual(model.parsed?.preparation, "scrambled")
+    XCTAssertEqual(model.stage, .choosing)
+  }
+
+  func testDismissiveClarificationReplyDoesNotSearchUSDA() async {
+    let provider = SearchCountingFoodProvider()
+    let model = LogViewModel(
+      parser: ScriptedFoodParser(results: [
+        ParsedFoodRequest(
+          productName: "",
+          searchTerms: "",
+          clarificationPrompt: "I’m sure it was! What did you eat?"
+        ),
+        // Model re-read of "who cares?" — still no food, ask again.
+        ParsedFoodRequest(
+          productName: "",
+          searchTerms: "",
+          clarificationPrompt: "No worries — what food should I log?"
+        ),
+      ]),
+      provider: provider
+    )
+    model.input = "Something yummy"
+    model.submit()
+    await waitUntil { model.stage == .awaitingClarification }
+
+    model.clarificationAnswer = "who cares?"
+    model.submitClarificationAnswer()
+    // Re-parse is async; wait for the *second* model prompt, not the pre-reparse stage.
+    await waitUntil {
+      model.activeQuestion?.prompt == "No worries — what food should I log?"
+        || model.stage == .choosing
+        || model.stage == .failed
+    }
+
+    XCTAssertNotEqual(model.stage, .choosing)
+    XCTAssertEqual(model.stage, .awaitingClarification)
+    XCTAssertEqual(model.activeQuestion?.prompt, "No worries — what food should I log?")
+    let searchCalls = await provider.searchCalls
+    XCTAssertEqual(searchCalls, 0, "Dismissive replies must not trigger USDA search")
+  }
+
   func testChoosingSuggestionAnswersClarification() async {
     let provider = SearchCountingFoodProvider(
       searchResponse: FoodSearchResponse(
@@ -135,21 +275,26 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
       )
     )
     let model = LogViewModel(
-      parser: FixedFoodParser(
-        result: ParsedFoodRequest(
+      parser: ScriptedFoodParser(results: [
+        ParsedFoodRequest(
           productName: "eggs and bacon",
           searchTerms: "eggs and bacon",
-          containsMultipleFoods: true
-        )
-      ),
+          containsMultipleFoods: true,
+          clarificationPrompt: "Which one?",
+          clarificationSuggestions: ["eggs", "bacon"]
+        ),
+        ParsedFoodRequest(
+          productName: "bacon",
+          searchTerms: "bacon"
+        ),
+      ]),
       provider: provider
     )
     model.input = "eggs and bacon"
     model.submit()
     await waitUntil { model.stage == .awaitingClarification }
 
-    // Source-grounded suggestions come from the policy when the source splits cleanly.
-    XCTAssertTrue((model.activeQuestion?.suggestedAnswers.count ?? 0) >= 2)
+    XCTAssertEqual(model.activeQuestion?.suggestedAnswers, ["eggs", "bacon"])
 
     model.chooseClarificationSuggestion("bacon")
     await waitUntil { model.stage == .choosing }
@@ -166,7 +311,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
         result: ParsedFoodRequest(
           productName: "eggs and bacon",
           searchTerms: "eggs and bacon",
-          containsMultipleFoods: true
+          containsMultipleFoods: true,
+          clarificationPrompt: "Which one?"
         )
       ),
       provider: provider
@@ -251,6 +397,22 @@ private struct FixedFoodParser: FoodDescriptionParsing {
 
   func parse(_ input: String) async throws -> ParsedFoodRequest {
     result
+  }
+}
+
+/// Returns successive parse results so clarification re-parses can advance the pipeline.
+private actor ScriptedFoodParser: FoodDescriptionParsing {
+  private var results: [ParsedFoodRequest]
+
+  init(results: [ParsedFoodRequest]) {
+    self.results = results
+  }
+
+  func parse(_ input: String) async throws -> ParsedFoodRequest {
+    if results.isEmpty {
+      return ParsedFoodRequest(productName: input, searchTerms: input)
+    }
+    return results.removeFirst()
   }
 }
 

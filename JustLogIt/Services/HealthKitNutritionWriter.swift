@@ -4,14 +4,25 @@ import JustLogItCore
 
 enum HealthKitWriteError: LocalizedError {
   case unavailable
-  case foodAccessDenied
   case noAuthorizedNutrients
+  case authorizationDisallowed(String)
 
   var errorDescription: String? {
     switch self {
-    case .unavailable: "Apple Health isn’t available on this device."
-    case .foodAccessDenied: "Apple Health didn’t grant permission to save food entries."
-    case .noAuthorizedNutrients: "Apple Health didn’t grant permission for these nutrients."
+    case .unavailable:
+      return "Apple Health isn’t available on this device."
+    case .noAuthorizedNutrients:
+      return "Apple Health didn’t grant permission for these nutrients."
+    case .authorizationDisallowed(let detail):
+      if detail.localizedCaseInsensitiveContains("disallowed") {
+        return
+          "Apple Health couldn’t authorize nutrition write access for this build. Try again on a device, or review Health permissions in Settings."
+      }
+      if detail.isEmpty {
+        return
+          "Apple Health couldn’t open the permission sheet for this build. Check HealthKit signing and try again on a device."
+      }
+      return detail
     }
   }
 }
@@ -19,9 +30,8 @@ enum HealthKitWriteError: LocalizedError {
 struct HealthAuthorizationSummary: Sendable, Equatable {
   let authorizedNutrientCount: Int
   let requestedNutrientCount: Int
-  let canWriteFood: Bool
 
-  var canWrite: Bool { canWriteFood && authorizedNutrientCount > 0 }
+  var canWrite: Bool { authorizedNutrientCount > 0 }
 }
 
 protocol HealthNutritionWriting: Sendable {
@@ -54,9 +64,55 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
 
   func requestAuthorization() async throws -> HealthAuthorizationSummary {
     guard isAvailable else { throw HealthKitWriteError.unavailable }
-    let nutrients = Set(HealthKitNutrientMapping.allQuantityTypes.map { $0 as HKSampleType })
-    let shareTypes = nutrients.union([HealthKitNutrientMapping.foodType])
-    try await store.requestAuthorization(toShare: shareTypes, read: [])
+    // Correlations are not authorized as types. Apple requires permission for the
+    // *constituent* quantity samples only (dietary energy, protein, …). Requesting
+    // HKCorrelationType.food in toShare raises:
+    //   "Authorization to share … HKCorrelationTypeIdentifierFood is disallowed"
+    // We still *save* a Food correlation after those nutrients are authorized.
+    let shareTypes = Set(
+      HealthKitNutrientMapping.requestableShareTypes.map { $0 as HKSampleType })
+    guard !shareTypes.isEmpty else { throw HealthKitWriteError.unavailable }
+
+    try await withCheckedThrowingContinuation {
+      (continuation: CheckedContinuation<Void, Error>) in
+      final class Once: @unchecked Sendable {
+        private var finished = false
+        private let lock = NSLock()
+        let continuation: CheckedContinuation<Void, Error>
+        init(_ continuation: CheckedContinuation<Void, Error>) {
+          self.continuation = continuation
+        }
+        func resume(_ result: Result<Void, Error>) {
+          lock.lock()
+          defer { lock.unlock() }
+          guard !finished else { return }
+          finished = true
+          continuation.resume(with: result)
+        }
+      }
+      let once = Once(continuation)
+      // HealthKit may throw NSException synchronously when the signed product is not
+      // allowed to request write access (missing entitlement / simulator provisioning).
+      let exception = JustLogItCatchException {
+        self.store.requestAuthorization(toShare: shareTypes, read: []) { success, error in
+          if let error {
+            once.resume(.failure(error))
+          } else if success {
+            once.resume(.success(()))
+          } else {
+            once.resume(
+              .failure(
+                HealthKitWriteError.authorizationDisallowed(
+                  "Apple Health did not complete the permission request."
+                )))
+          }
+        }
+      }
+      if let exception {
+        let reason = exception.reason ?? exception.name.rawValue
+        once.resume(.failure(HealthKitWriteError.authorizationDisallowed(reason)))
+      }
+    }
     return authorizationSummary()
   }
 
@@ -70,10 +126,11 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
     nutrients: [NutrientAmount]
   ) async throws {
     guard isAvailable else { throw HealthKitWriteError.unavailable }
-    guard store.authorizationStatus(for: HealthKitNutrientMapping.foodType) == .sharingAuthorized
-    else { throw HealthKitWriteError.foodAccessDenied }
+    guard let foodType = HealthKitNutrientMapping.foodCorrelationType else {
+      throw HealthKitWriteError.unavailable
+    }
 
-    var samples = Set<HKSample>()
+    var objects = Set<HKSample>()
     var seen = Set<NutrientKey>()
     for nutrient in nutrients where nutrient.amount.isFinite && nutrient.amount >= 0 {
       guard !seen.contains(nutrient.key),
@@ -85,7 +142,7 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
         HKMetadataKeySyncIdentifier: "\(entryID.uuidString).\(nutrient.key.rawValue)",
         HKMetadataKeySyncVersion: version,
       ]
-      samples.insert(
+      objects.insert(
         HKQuantitySample(
           type: mapping.quantityType,
           quantity: HKQuantity(unit: mapping.unit, doubleValue: nutrient.amount),
@@ -94,8 +151,10 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
           metadata: metadata
         ))
     }
-    guard !samples.isEmpty else { throw HealthKitWriteError.noAuthorizedNutrients }
+    guard !objects.isEmpty else { throw HealthKitWriteError.noAuthorizedNutrients }
 
+    // One Food correlation groups the authorized nutrient samples (Health’s “meal” unit).
+    // Auth is on those samples — not on the correlation type itself.
     var metadata: [String: Any] = [
       HKMetadataKeyFoodType: foodName,
       HKMetadataKeySyncIdentifier: "\(entryID.uuidString).food",
@@ -104,10 +163,10 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
     ]
     if let fdcID { metadata["JustLogItFDCID"] = fdcID }
     let correlation = HKCorrelation(
-      type: HealthKitNutrientMapping.foodType,
+      type: foodType,
       start: consumedAt,
       end: consumedAt,
-      objects: samples,
+      objects: objects,
       metadata: metadata
     )
     try await store.save(correlation)
@@ -127,14 +186,12 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
   }
 
   private func authorizationSummary() -> HealthAuthorizationSummary {
-    let authorized = HealthKitNutrientMapping.allQuantityTypes.filter {
+    let authorized = HealthKitNutrientMapping.requestableShareTypes.filter {
       store.authorizationStatus(for: $0) == .sharingAuthorized
     }.count
     return HealthAuthorizationSummary(
       authorizedNutrientCount: authorized,
-      requestedNutrientCount: HealthKitNutrientMapping.allQuantityTypes.count,
-      canWriteFood: store.authorizationStatus(for: HealthKitNutrientMapping.foodType)
-        == .sharingAuthorized
+      requestedNutrientCount: HealthKitNutrientMapping.requestableShareTypes.count
     )
   }
 }
@@ -153,7 +210,19 @@ struct HealthKitNutrientMapping: Sendable {
     unit = Self.unit(for: key)
   }
 
-  static let foodType = HKObjectType.correlationType(forIdentifier: .food)!
+  static var foodCorrelationType: HKCorrelationType? {
+    HKObjectType.correlationType(forIdentifier: .food)
+  }
+
+  /// Quantity types requested at permission time (constituents of a Food correlation).
+  /// Core macros first — keep the set bounded so Simulator/signing edge cases stay rare.
+  static var requestableShareTypes: [HKQuantityType] {
+    let preferred: [NutrientKey] = [
+      .energy, .protein, .carbohydrate, .totalFat, .saturatedFat, .fiber, .totalSugar,
+      .sodium, .cholesterol, .calcium, .iron, .potassium, .vitaminD, .vitaminC, .water,
+    ]
+    return preferred.compactMap { HealthKitNutrientMapping($0)?.quantityType }
+  }
 
   static var allQuantityTypes: [HKQuantityType] {
     allMappings.map(\.quantityType)
@@ -164,10 +233,14 @@ struct HealthKitNutrientMapping: Sendable {
   }
 
   static func deletionTargets(entryID: UUID) -> [(type: HKObjectType, syncIdentifier: String)] {
-    [(foodType, "\(entryID.uuidString).food")]
-      + allMappings.map {
-        ($0.quantityType, "\(entryID.uuidString).\($0.key.rawValue)")
-      }
+    var targets: [(type: HKObjectType, syncIdentifier: String)] = []
+    if let food = foodCorrelationType {
+      targets.append((food, "\(entryID.uuidString).food"))
+    }
+    targets += allMappings.map {
+      ($0.quantityType, "\(entryID.uuidString).\($0.key.rawValue)")
+    }
+    return targets
   }
 
   private static func identifier(for key: NutrientKey) -> HKQuantityTypeIdentifier? {
@@ -222,7 +295,7 @@ struct HealthKitNutrientMapping: Sendable {
     case "mg": .gramUnit(with: .milli)
     case "µg": .gramUnit(with: .micro)
     case "mL": .literUnit(with: .milli)
-    default: preconditionFailure("Unsupported canonical nutrient unit")
+    default: .gram()  // fail soft — never crash the app on an unexpected unit string
     }
   }
 }

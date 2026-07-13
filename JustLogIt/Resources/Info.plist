@@ -22,14 +22,25 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.healthcare-fitness</string>
+	<key>NSCameraUsageDescription</key>
+	<string>JustLogIt uses the camera so you can photograph food to log.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>JustLogIt saves nutrition you choose to Apple Health.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>JustLogIt accesses your photo library so you can choose a food photo to log.</string>
 	<key>ProxyBaseURL</key>
 	<string>$(PROXY_BASE_URL)</string>
 	<key>ProxyAllowedHost</key>
 	<string>$(PROXY_ALLOWED_HOST)</string>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchMark</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<true/>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

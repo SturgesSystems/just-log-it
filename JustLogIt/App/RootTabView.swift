@@ -2,13 +2,7 @@ import SwiftData
 import SwiftUI
 
 struct RootTabView: View {
-  private enum AppTab: Hashable {
-    case log
-    case entries
-    case settings
-  }
-
-  @State private var selection: AppTab = .log
+  @StateObject private var navigation = AppNavigation()
   @State private var healthLifecycleMessage: String?
   @State private var isReconcilingHealth = false
   @Environment(\.modelContext) private var modelContext
@@ -16,26 +10,35 @@ struct RootTabView: View {
   @Environment(\.usesVolatileStore) private var usesVolatileStore
 
   var body: some View {
-    TabView(selection: $selection) {
-      Tab("Log", systemImage: "plus.circle.fill", value: .log) {
+    TabView(selection: $navigation.tab) {
+      Tab("Log", systemImage: "plus.circle.fill", value: AppNavigation.Tab.log) {
         NavigationStack {
-          LogView()
+          LogView(
+            onOpenEntry: { navigation.openEntry($0) },
+            onOpenFood: { navigation.openFood($0) }
+          )
         }
       }
 
-      Tab("Entries", systemImage: "list.bullet.rectangle", value: .entries) {
-        NavigationStack {
-          EntriesView { selection = .log }
-        }
+      Tab("Entries", systemImage: "list.bullet.rectangle", value: AppNavigation.Tab.entries) {
+        // EntriesView owns its NavigationStack + path for deep links.
+        EntriesView(onLogFood: { navigation.tab = .log })
       }
 
-      Tab("Settings", systemImage: "gearshape", value: .settings) {
+      Tab("Settings", systemImage: "gearshape", value: AppNavigation.Tab.settings) {
         NavigationStack {
           SettingsView()
         }
       }
     }
-    .task { await reconcileHealthIfActive() }
+    // Force non-black chrome on first paint before tab content settles.
+    .tint(.accentColor)
+    .environmentObject(navigation)
+    .task {
+      // Let the first frame paint before Health reconciliation work.
+      try? await Task.sleep(for: .milliseconds(300))
+      await reconcileHealthIfActive()
+    }
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
       Task { await reconcileHealthIfActive() }

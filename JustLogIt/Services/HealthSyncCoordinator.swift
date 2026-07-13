@@ -236,7 +236,7 @@ enum HealthSyncCoordinator {
     } catch let error as HealthKitWriteError {
       let outcome: HealthSyncOutcome
       switch error {
-      case .foodAccessDenied, .noAuthorizedNutrients:
+      case .noAuthorizedNutrients, .authorizationDisallowed:
         outcome = finishDenied(
           entry, message: error.localizedDescription, modelContext: modelContext)
       case .unavailable:

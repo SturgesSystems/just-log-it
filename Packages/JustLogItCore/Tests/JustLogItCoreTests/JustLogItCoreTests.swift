@@ -591,3 +591,306 @@ import Testing
   // Remembered cookie outranks unrelated cracker; full set preserved.
   #expect(Set(ranked.map(\.fdcID)) == [1, 2, 99])
 }
+
+@Test func twoCookiesResolveViaHouseholdAndGramServingSize() {
+  let parsed = ParsedFoodRequest(brand: "Oreo", productName: "cookie", quantity: 2, unit: "cookies")
+  let food = FoodDetails(
+    fdcID: 1,
+    description: "OREO COOKIES",
+    dataType: "Branded",
+    servingSize: 28,
+    servingSizeUnit: "g",
+    householdServing: "1 cookie",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 480)],
+    nutrientsPerServing: [NutrientAmount(key: .energy, amount: 134)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 2 cookies to resolve, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 56)
+  #expect(resolution.basis == .grams)
+}
+
+@Test func twoEggsResolveAgainstHouseholdLargeAndGramServing() {
+  let parsed = ParsedFoodRequest(
+    productName: "scrambled eggs", quantity: 2, unit: "eggs", quantityText: "two large")
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked, scrambled",
+    dataType: "SR Legacy",
+    servingSize: 50,
+    servingSizeUnit: "g",
+    householdServing: "1 large",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 148)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 2 eggs → 100 g, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 100)
+}
+
+@Test func oneHundredGramsResolvesWithPerHundredGramNutrients() {
+  let parsed = ParsedFoodRequest(productName: "chicken", quantity: 100, unit: "g")
+  let food = FoodDetails(
+    fdcID: 3,
+    description: "Chicken",
+    dataType: "Foundation",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 165)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 100 g to resolve, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 100)
+  #expect(resolution.basis == .grams)
+}
+
+@Test func oneCupMatchesHouseholdCupWithGramServing() {
+  let parsed = ParsedFoodRequest(productName: "rice", quantity: 1, unit: "cup")
+  let food = FoodDetails(
+    fdcID: 4,
+    description: "Rice",
+    dataType: "Branded",
+    servingSize: 158,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    nutrientsPerServing: [NutrientAmount(key: .energy, amount: 200)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 1 cup to resolve, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 158)
+}
+
+@Test func unitConversionMassIsExact() {
+  #expect(abs((UnitConversion.toGrams(quantity: 1, unit: "oz") ?? 0) - 28.349_523_125) < 1e-9)
+  #expect(abs((UnitConversion.convert(quantity: 1000, from: "g", to: "kg") ?? 0) - 1) < 1e-12)
+  #expect(UnitConversion.toGrams(quantity: 1, unit: "cup") == nil)  // no invented density
+}
+
+@Test func unitConversionVolumeIsExact() {
+  let cupML = UnitConversion.toMilliliters(quantity: 1, unit: "cup")!
+  let tbspFromCup = UnitConversion.convert(quantity: 1, from: "cup", to: "tbsp")!
+  #expect(abs(cupML - 236.588_236_5) < 1e-6)
+  #expect(abs(tbspFromCup - 16) < 1e-9)
+  #expect(UnitConversion.family("fl oz") == "floz")
+  #expect(UnitConversion.family("oz") == "oz")  // weight ≠ fluid
+}
+
+@Test func twoTablespoonsResolveViaHouseholdVolumeAndGramServing() {
+  let parsed = ParsedFoodRequest(productName: "peanut butter", quantity: 2, unit: "tbsp")
+  let food = FoodDetails(
+    fdcID: 9,
+    description: "Peanut butter",
+    dataType: "Branded",
+    servingSize: 32,
+    servingSizeUnit: "g",
+    householdServing: "2 tbsp",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 600)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 2 tbsp to resolve via household bridge, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 32)
+}
+
+@Test func halfCupResolvesAsHalfOfOneCupHousehold() {
+  let parsed = ParsedFoodRequest(productName: "rice", quantity: 0.5, unit: "cup")
+  let food = FoodDetails(
+    fdcID: 10,
+    description: "Rice",
+    dataType: "Branded",
+    servingSize: 158,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    nutrientsPerServing: [NutrientAmount(key: .energy, amount: 200)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected ½ cup to resolve, got \(outcome)")
+    return
+  }
+  #expect(abs((resolution.consumedGrams ?? 0) - 79) < 0.001)
+}
+
+@Test func oneCupCookedRiceAgainstPackGramsUsesCulinaryDensityNotPackAsCup() {
+  // Branded "1 pack (200 g)" is package weight — not equal to 1 cup.
+  // Fall back to ~158 g/cup for cooked rice (approx), not 200 g.
+  let parsed = ParsedFoodRequest(
+    productName: "jasmine rice",
+    quantity: 1,
+    unit: "cup",
+    quantityText: "One cup"
+  )
+  let food = FoodDetails(
+    fdcID: 99,
+    description: "JASMINE ORGANIC COOKED RICE, JASMINE",
+    dataType: "Branded",
+    servingSize: 200,
+    servingSizeUnit: "g",
+    householdServing: "1 pack",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 130)],
+    nutrientsPerServing: [NutrientAmount(key: .energy, amount: 260)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected approx cup→g for cooked rice pack food, got \(outcome)")
+    return
+  }
+  #expect(abs((resolution.consumedGrams ?? 0) - 158) < 0.5)
+  #expect(resolution.displayText.lowercased().contains("approx"))
+  // Must not treat the 200 g pack as 1 cup.
+  #expect(abs((resolution.consumedGrams ?? 0) - 200) > 1)
+}
+
+@Test func foodPortionsFillMissingServingForSRLegacyBigMacStyle() {
+  // Mirrors FDC 170720 McDONALD'S, BIG MAC: no servingSize, one portion 219 g / item.
+  let resolved = FoodPortionServing.resolve(
+    servingSize: nil,
+    servingSizeUnit: nil,
+    householdServing: nil,
+    portions: [
+      USDAFoodPortion(
+        gramWeight: 219,
+        amount: 1,
+        modifier: "item 7.6 oz",
+        measureUnitName: "undetermined",
+        measureUnitAbbreviation: "undetermined"
+      )
+    ]
+  )
+  #expect(resolved.servingSize == 219)
+  #expect(resolved.servingSizeUnit == "g")
+  #expect(resolved.householdServing == "1 item 7.6 oz")
+}
+
+@Test func foodPortionsPreferNamedItemOverQuantityNotSpecified() {
+  // Mirrors FDC 2706916 Survey Big Mac (McDonalds).
+  let resolved = FoodPortionServing.resolve(
+    servingSize: nil,
+    servingSizeUnit: nil,
+    householdServing: nil,
+    portions: [
+      USDAFoodPortion(gramWeight: 205, portionDescription: "Quantity not specified"),
+      USDAFoodPortion(gramWeight: 205, portionDescription: "1 McDonald's Big Mac"),
+      USDAFoodPortion(gramWeight: 315, portionDescription: "1 McDonald's Grand Mac"),
+      USDAFoodPortion(gramWeight: 135, portionDescription: "1 MCDonald's Mac Jr"),
+    ]
+  )
+  #expect(resolved.servingSize == 205)
+  #expect(resolved.servingSizeUnit == "g")
+  #expect(resolved.householdServing == "1 McDonald's Big Mac")
+}
+
+@Test func foodPortionsDoNotOverrideLabeledBrandedServing() {
+  let resolved = FoodPortionServing.resolve(
+    servingSize: 100,
+    servingSizeUnit: "g",
+    householdServing: "1 bar",
+    portions: [USDAFoodPortion(gramWeight: 50, amount: 1, modifier: "piece")]
+  )
+  #expect(resolved.servingSize == 100)
+  #expect(resolved.servingSizeUnit == "g")
+  #expect(resolved.householdServing == "1 bar")
+}
+
+@Test func oneServingResolvesWhenPortionsMappedToServingGrams() {
+  // App path: user taps "1 serving" after picking SR Big Mac details.
+  let parsed = ParsedFoodRequest(
+    productName: "Big Mac", quantity: 1, unit: "serving", quantityText: "1 serving")
+  let food = FoodDetails(
+    fdcID: 170720,
+    description: "McDONALD'S, BIG MAC",
+    dataType: "SR Legacy",
+    servingSize: 219,
+    servingSizeUnit: "g",
+    householdServing: "1 item 7.6 oz",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 257)],
+    nutrientsPerServing: [NutrientAmount(key: .energy, amount: 257 * 2.19)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 1 serving Big Mac to resolve, got \(outcome)")
+    return
+  }
+  #expect(abs((resolution.consumedGrams ?? 0) - 219) < 0.01)
+  #expect(resolution.servingMultiplier == 1 || abs((resolution.servingMultiplier ?? 0) - 1) < 0.01)
+}
+
+@Test func compositeComponentRequestKeepsLeadingCountOnBigMac() {
+  let request = CompositeComponentRequest.make(from: "1 Big Mac")
+  #expect(request.productName == "Big Mac")
+  #expect(request.quantity == 1)
+  #expect(request.unit == "item")
+  #expect(request.searchTerms == "Big Mac")
+}
+
+@Test func quantityDefaultFillsOneServingWhenAmountMissing() {
+  let bare = ParsedFoodRequest(productName: "Big Mac", searchTerms: "Big Mac")
+  let filled = ParsedQuantityDefault.applyingDefaultIfNeeded(bare)
+  #expect(filled.quantity == 1)
+  #expect(filled.unit == "serving")
+  #expect(filled.quantityNeedsClarification == false)
+
+  let already = ParsedFoodRequest(
+    productName: "eggs", searchTerms: "eggs", quantity: 2, unit: "large")
+  let kept = ParsedQuantityDefault.applyingDefaultIfNeeded(already)
+  #expect(kept.quantity == 2)
+  #expect(kept.unit == "large")
+}
+
+@Test func autoSelectsMultiTokenProductMatchLikeBigMac() {
+  let ranked = [
+    FoodSearchResult(
+      fdcID: 2706916, description: "Big Mac (McDonalds)", dataType: "Survey (FNDDS)"),
+    FoodSearchResult(
+      fdcID: 1, description: "Macaroni salad", dataType: "Survey (FNDDS)"),
+  ]
+  let parsed = ParsedFoodRequest(productName: "Big Mac", searchTerms: "Big Mac")
+  let pick = FoodSearchAutoSelect.highConfidencePick(ranked: ranked, for: parsed)
+  #expect(pick?.fdcID == 2706916)
+}
+
+@Test func doesNotAutoSelectGenericSingleTokenFood() {
+  let ranked = [
+    FoodSearchResult(fdcID: 1, description: "Rice, white, cooked", dataType: "Foundation"),
+    FoodSearchResult(fdcID: 2, description: "Brown rice, cooked", dataType: "Foundation"),
+  ]
+  let parsed = ParsedFoodRequest(productName: "rice", searchTerms: "rice")
+  let pick = FoodSearchAutoSelect.highConfidencePick(ranked: ranked, for: parsed)
+  #expect(pick == nil)
+}
+
+@Test func autoSelectsRememberedFdcEvenAmongSeveral() {
+  let ranked = [
+    FoodSearchResult(fdcID: 10, description: "Cookie dough", dataType: "Branded"),
+    FoodSearchResult(fdcID: 99, description: "OREO cookie", dataType: "Branded"),
+  ]
+  let parsed = ParsedFoodRequest(productName: "cookie", searchTerms: "cookie")
+  let pick = FoodSearchAutoSelect.highConfidencePick(
+    ranked: ranked, for: parsed, preferredFdcIDs: [99])
+  #expect(pick?.fdcID == 99)
+}
+
+@Test func compositeComponentRequestBareNameDefaultsToOneServing() {
+  let request = CompositeComponentRequest.make(from: "large fries")
+  #expect(request.productName == "large fries")
+  #expect(request.quantity == 1)
+  #expect(request.unit == "serving")
+}
+
+@Test func compositeComponentRequestKeepsExplicitUnit() {
+  let request = CompositeComponentRequest.make(from: "2 cups rice")
+  #expect(request.productName == "rice")
+  #expect(request.quantity == 2)
+  #expect(request.unit == "cups")
+}

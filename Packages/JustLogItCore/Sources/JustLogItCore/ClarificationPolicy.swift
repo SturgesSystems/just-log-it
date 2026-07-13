@@ -2,14 +2,17 @@ import Foundation
 
 /// Deterministic routing for food-interpretation drafts.
 ///
-/// Priority (Phase 1, pre-USDA):
+/// Soft user-facing clarification is **model-authored only**: when
+/// `clarificationPrompt` is non-empty, the app shows that prompt. This type does
+/// not invent chat copy, food-type rules, or sufficiency heuristics.
+///
+/// Priority (pre-USDA):
 /// 1. Max automatic turns exceeded with open material issues → `fallbackManual`
-/// 2. Empty / no identity → `requireEdit` (never proceed to USDA)
-/// 3. Multiple foods → `clarify` (never silent proceed)
-/// 4. Residual invalid-quantity findings that still block safety → `clarify`
-///    (validator normally strips invalid quantities so proceed remains OK)
-/// 5. Else → `proceed` — including when only `missingQuantity` remains, because
-///    the app resolves portion after USDA selection via `ServingResolution`.
+/// 2. Non-empty model `clarificationPrompt` → `clarify` (prompt + suggestions from model)
+/// 3. Empty identity without a model prompt → `requireEdit` (model failed to guide)
+/// 4. Multiple foods without a model prompt → `requireEdit`
+/// 5. Residual invalid quantity values → `clarify` with a validation message
+/// 6. Else → `proceed`
 ///
 /// `FieldConfidence.confirmed` is set only by `applyUserConfirm`, never by model scores.
 public struct ClarificationPolicy: Sendable {
@@ -24,9 +27,8 @@ public struct ClarificationPolicy: Sendable {
 
   public func decide(_ draft: FoodInterpretationDraft) -> ClarificationDecision {
     let validated = FoodInterpretationValidator().validate(draft)
-    let material = validated.materialAmbiguities
 
-    // 1. Two automatic clarify turns max, then offer manual edit / simpler path.
+    // 1. Two automatic clarify turns max, then manual path.
     if validated.turnCount >= maxTurns, hasBlockingMaterialIssue(validated) {
       var withMax = validated
       if !withMax.ambiguities.contains(.maxTurnsExceeded) {
@@ -37,33 +39,78 @@ public struct ClarificationPolicy: Sendable {
       )
     }
 
-    // 2. Empty identity never proceeds to USDA.
-    if !validated.hasIdentity || material.contains(.emptyIdentity)
-      || material.contains(.noPlausibleIdentity)
-    {
-      return .requireEdit(
-        "Enter a food name to search. Empty identity cannot proceed to USDA."
-      )
+    // 2. Multi-food meal → composite (several USDA lookups, one log entry).
+    // Prefer model componentNames; otherwise recover from source "X with Y" / "X and Y".
+    if validated.turnCount < maxTurns {
+      var components = Self.dedupedComponentNames(validated.componentNames)
+      if components.count < 2 {
+        components = Self.dedupedComponentNames(
+          Self.inferredComponents(from: validated.sourceText))
+      }
+      if components.count >= 2,
+        validated.containsMultipleFoods || Self.looksLikeMultiItemMeal(validated.sourceText)
+      {
+        return .beginComposite(
+          componentNames: components,
+          sourceText: validated.sourceText
+        )
+      }
     }
 
-    // 3. Multiple foods → clarify (or requireEdit if we cannot form a question).
-    if validated.containsMultipleFoods || material.contains(.multipleFoods) {
+    // 3. Model-authored soft clarify — the only source of conversational copy.
+    if validated.turnCount < maxTurns, let prompt = validated.modelClarificationPrompt {
+      let code = Self.clarificationCode(for: validated)
+      // Identity freeform only: model often emits junk chips (warm/cooked) here.
+      let chips: [String]
+      switch code {
+      case .emptyIdentity, .noPlausibleIdentity:
+        chips = []
+      default:
+        chips = Self.usableAnswerChips(validated.clarificationSuggestions, for: code)
+      }
       return .clarify(
         ClarificationQuestion(
-          code: .multipleFoods,
-          prompt: "It looks like more than one food. Which one do you want to log?",
-          suggestedAnswers: Self.multipleFoodSuggestions(from: validated),
+          code: code,
+          prompt: prompt,
+          suggestedAnswers: chips,
           allowsFreeform: true
         )
       )
     }
 
-    // 4. Invalid quantity that was not fully stripped (defensive).
+    // 4. Empty identity with no model question → hard stop (no canned chat).
+    if !validated.hasIdentity {
+      return .requireEdit(
+        validated.ambiguityNotes
+          ?? "No food identity to look up. Name the food or enter nutrition manually."
+      )
+    }
+
+    // 5. Multiple foods without usable component list → pick one or manual.
+    if validated.containsMultipleFoods {
+      if validated.turnCount < maxTurns {
+        return .clarify(
+          ClarificationQuestion(
+            code: .multipleFoods,
+            prompt: validated.modelClarificationPrompt
+              ?? "It looks like more than one food. Which one should I log first?",
+            suggestedAnswers: Self.usableAnswerChips(
+              validated.clarificationSuggestions, for: .multipleFoods),
+            allowsFreeform: true
+          )
+        )
+      }
+      return .requireEdit(
+        validated.ambiguityNotes
+          ?? "More than one food was mentioned. Log one food at a time or enter nutrition manually."
+      )
+    }
+
+    // 6. Invalid quantity that was not fully stripped (defensive validation).
     if validated.ambiguities.contains(.invalidQuantity),
       validated.quantity != nil || validated.fractionOfWhole != nil
         || validated.containerSize != nil || validated.alternateQuantity != nil
     {
-      // Re-strip via validator path: if values remain but still marked invalid, ask.
       return .clarify(
         ClarificationQuestion(
           code: .invalidQuantity,
@@ -74,7 +121,7 @@ public struct ClarificationPolicy: Sendable {
       )
     }
 
-    // 5. Proceed — missing quantity alone is OK pre-USDA (ServingResolution after pick).
+    // 7. Proceed.
     return .proceed(validated.toParsedFoodRequest())
   }
 
@@ -82,6 +129,9 @@ public struct ClarificationPolicy: Sendable {
 
   /// Applies a free-form or suggested answer for the active clarification question.
   /// Increments `turnCount` and re-validates. Does not set `confirmed` confidence.
+  ///
+  /// Prefer re-parsing the conversation with the on-device model when available;
+  /// this path keeps offline recovery and unit tests working.
   public func applyUserAnswer(
     _ answer: String,
     to draft: FoodInterpretationDraft,
@@ -101,26 +151,11 @@ public struct ClarificationPolicy: Sendable {
         )
         next.searchTerms = trimmed
         next.containsMultipleFoods = false
-        // Clear multiple-foods ambiguity state; validate will recompute.
         next.ambiguities.removeAll { $0 == .multipleFoods || $0 == .emptyIdentity }
       }
 
-    case .invalidQuantity, .missingQuantity:
-      if let parsed = Self.parsePositiveQuantity(trimmed) {
-        next.quantity = FieldFact(
-          value: parsed,
-          provenance: .userConfirmed,
-          confidence: .high
-        )
-        // Leave unit as-is unless answer embeds a simple unit token.
-        if let unit = Self.parseTrailingUnit(trimmed) {
-          next.unit = FieldFact(
-            value: unit,
-            provenance: .userConfirmed,
-            confidence: .high
-          )
-        }
-      }
+    case .invalidQuantity, .missingQuantity, .uncertainPreparation:
+      Self.applyDetailAnswer(trimmed, to: &next, for: question.code)
 
     case .uncertainBrand:
       if !trimmed.isEmpty {
@@ -131,17 +166,7 @@ public struct ClarificationPolicy: Sendable {
         )
       }
 
-    case .uncertainPreparation:
-      if !trimmed.isEmpty {
-        next.preparation = FieldFact(
-          value: trimmed,
-          provenance: .userConfirmed,
-          confidence: .high
-        )
-      }
-
     case .conflictingUnits, .hiddenIngredient, .maxTurnsExceeded:
-      // Phase 1: treat free-form as identity refinement when non-empty.
       if !trimmed.isEmpty, !next.hasIdentity {
         next.productName = FieldFact(
           value: trimmed,
@@ -151,6 +176,12 @@ public struct ClarificationPolicy: Sendable {
         next.searchTerms = trimmed
       }
     }
+
+    // User answered — clear model clarify so we do not re-ask the same prompt.
+    next.quantityNeedsClarification = false
+    next.preparationNeedsClarification = false
+    next.clarificationPrompt = nil
+    next.clarificationSuggestions = []
 
     return FoodInterpretationValidator().validate(next)
   }
@@ -175,6 +206,10 @@ public struct ClarificationPolicy: Sendable {
     next.preparation = next.preparation?.confirmedByUser()
     next.descriptors = next.descriptors.confirmedByUser()
     next.evidenceKind = .userEdit
+    next.quantityNeedsClarification = false
+    next.preparationNeedsClarification = false
+    next.clarificationPrompt = nil
+    next.clarificationSuggestions = []
     return FoodInterpretationValidator().validate(next)
   }
 
@@ -183,6 +218,7 @@ public struct ClarificationPolicy: Sendable {
   private func hasBlockingMaterialIssue(_ draft: FoodInterpretationDraft) -> Bool {
     if !draft.hasIdentity { return true }
     if draft.containsMultipleFoods { return true }
+    if draft.modelClarificationPrompt != nil { return true }
     if draft.ambiguities.contains(where: {
       switch $0 {
       case .emptyIdentity, .noPlausibleIdentity, .multipleFoods:
@@ -196,42 +232,170 @@ public struct ClarificationPolicy: Sendable {
     return false
   }
 
-  /// Best-effort split of conjunctions for suggested single-food answers.
-  /// Deterministic and conservative — freeform remains available.
-  private static func multipleFoodSuggestions(from draft: FoodInterpretationDraft) -> [String] {
-    let source = draft.sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let product = draft.trimmedIdentity
-    let candidates = [source, product].filter { !$0.isEmpty }
-    guard let text = candidates.first else { return [] }
+  /// Maps model state to an ambiguity code for answer handling — not for copy.
+  private static func clarificationCode(for draft: FoodInterpretationDraft) -> AmbiguityCode {
+    if !draft.hasIdentity { return .emptyIdentity }
+    if draft.containsMultipleFoods { return .multipleFoods }
+    if draft.quantityNeedsClarification { return .missingQuantity }
+    if draft.preparationNeedsClarification { return .uncertainPreparation }
+    return .noPlausibleIdentity
+  }
 
-    let separators = [" and ", " & ", ",", " plus ", " with "]
-    var pieces: [String] = [text]
-    for separator in separators {
-      pieces = pieces.flatMap { chunk in
-        chunk
-          .components(separatedBy: separator)
-          .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-          .filter { !$0.isEmpty }
+  private static func dedupedComponentNames(_ names: [String]) -> [String] {
+    var seen = Set<String>()
+    var ordered: [String] = []
+    for raw in names {
+      let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !name.isEmpty else { continue }
+      let key = name.lowercased()
+      guard seen.insert(key).inserted else { continue }
+      ordered.append(name)
+    }
+    return ordered
+  }
+
+  /// Conservative multi-item detectors for phrases like "cereal with milk".
+  private static func looksLikeMultiItemMeal(_ source: String) -> Bool {
+    let lower = " \(source.lowercased()) "
+    return lower.contains(" with ") || lower.contains(" and ") || lower.contains(" plus ")
+  }
+
+  /// Split source on with/and/plus into 2 short food-ish phrases when possible.
+  private static func inferredComponents(from source: String) -> [String] {
+    let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return [] }
+
+    let separators = [" with ", " and ", " plus ", " & "]
+    for sep in separators {
+      let range = trimmed.range(of: sep, options: .caseInsensitive)
+      guard let range else { continue }
+      let left = String(trimmed[..<range.lowerBound])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let right = String(trimmed[range.upperBound...])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      guard left.count >= 3, right.count >= 3 else { continue }
+      // Strip leading meal-speak so search works better.
+      let cleanedLeft = stripLeadingMealPhrase(left)
+      let cleanedRight = stripLeadingMealPhrase(right)
+      guard cleanedLeft.count >= 2, cleanedRight.count >= 2 else { continue }
+      // Avoid splitting sandwich-style names that are one food ("peanut butter and jelly sandwich").
+      if cleanedRight.lowercased().hasSuffix("sandwich")
+        || cleanedRight.lowercased().hasSuffix("burger")
+        || cleanedRight.lowercased().hasSuffix("pizza")
+      {
+        continue
+      }
+      return [cleanedLeft, cleanedRight]
+    }
+    return []
+  }
+
+  private static func stripLeadingMealPhrase(_ text: String) -> String {
+    var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefixes = [
+      "i had a bowl of ", "i had a ", "i had an ", "i had ", "i ate a ", "i ate an ", "i ate ",
+      "a bowl of ", "bowl of ", "a glass of ", "glass of ", "a cup of ", "cup of ",
+      "some ", "a ", "an ", "the ",
+    ]
+    let lower = t.lowercased()
+    for p in prefixes where lower.hasPrefix(p) {
+      t = String(t.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+      break
+    }
+    return t
+  }
+
+  /// Drop question-shaped or non-answer chips; never invent replacements.
+  private static func usableAnswerChips(_ suggestions: [String], for code: AmbiguityCode) -> [String]
+  {
+    let nonFoodNoise: Set<String> = [
+      "warm", "hot", "cold", "cooked", "raw", "yummy", "delicious", "tasty", "good", "great",
+      "something", "food", "meal", "snack", "leftovers", "whatever", "idk", "n/a", "na",
+    ]
+    return suggestions
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { chip in
+        guard !chip.isEmpty, chip.count <= 48 else { return false }
+        if chip.hasSuffix("?") { return false }
+        let lower = chip.lowercased()
+        if lower.hasPrefix("how ") || lower.hasPrefix("what ") || lower.hasPrefix("which ")
+          || lower.hasPrefix("were ") || lower.hasPrefix("was ") || lower.hasPrefix("could ")
+          || lower.hasPrefix("can ") || lower.hasPrefix("did ")
+        {
+          return false
+        }
+        // Prep-only chips are fine for prep questions, not for multi-food identity picks.
+        if code == .multipleFoods, nonFoodNoise.contains(lower) { return false }
+        if code == .missingQuantity, nonFoodNoise.contains(lower), !chip.contains(where: \.isNumber)
+        {
+          return false
+        }
+        return true
+      }
+  }
+
+  private static func applyDetailAnswer(
+    _ answer: String,
+    to draft: inout FoodInterpretationDraft,
+    for code: AmbiguityCode
+  ) {
+    guard !answer.isEmpty else { return }
+
+    if let quantity = parsePositiveQuantity(answer) {
+      draft.quantity = FieldFact(
+        value: quantity,
+        provenance: .userConfirmed,
+        confidence: .high
+      )
+      draft.quantityText = FieldFact(
+        value: answer,
+        provenance: .userConfirmed,
+        confidence: .high
+      )
+      if let unit = parseTrailingUnit(answer) {
+        draft.unit = FieldFact(
+          value: unit,
+          provenance: .userConfirmed,
+          confidence: .high
+        )
+      } else if let remainder = trailingDetail(afterQuantityIn: answer), !remainder.isEmpty {
+        draft.preparation = FieldFact(
+          value: remainder,
+          provenance: .userConfirmed,
+          confidence: .high
+        )
+        foldPreparationIntoSearch(remainder, draft: &draft)
+      }
+    } else if code == .uncertainPreparation || code == .missingQuantity {
+      draft.preparation = FieldFact(
+        value: answer,
+        provenance: .userConfirmed,
+        confidence: .high
+      )
+      foldPreparationIntoSearch(answer, draft: &draft)
+      if code == .missingQuantity {
+        draft.quantityText = FieldFact(
+          value: answer,
+          provenance: .userConfirmed,
+          confidence: .high
+        )
       }
     }
+  }
 
-    var seen = Set<String>()
-    var suggestions: [String] = []
-    for piece in pieces {
-      let key = piece.lowercased()
-      guard !seen.contains(key), piece.count >= 2, piece.count <= 60 else { continue }
-      // Skip fragments that still look like multi-food clauses.
-      if key.contains(" and ") || key.contains(" & ") { continue }
-      seen.insert(key)
-      suggestions.append(piece)
-      if suggestions.count == 4 { break }
+  private static func foldPreparationIntoSearch(
+    _ preparation: String,
+    draft: inout FoodInterpretationDraft
+  ) {
+    let base = draft.trimmedIdentity
+    let prep = preparation.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !base.isEmpty, !prep.isEmpty else { return }
+    if !base.lowercased().contains(prep.lowercased()) {
+      draft.searchTerms = "\(prep) \(base)"
     }
-    // Only surface suggestions when we actually split into multiple options.
-    return suggestions.count >= 2 ? suggestions : []
   }
 
   private static func parsePositiveQuantity(_ text: String) -> Double? {
-    // Leading number (locale-agnostic for Phase 1 ASCII / plain Double).
     let pattern = #"^[\s]*([0-9]+(?:\.[0-9]+)?)"#
     guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
     let range = NSRange(text.startIndex..., in: text)
@@ -250,7 +414,27 @@ public struct ClarificationPolicy: Sendable {
     guard let match = regex.firstMatch(in: text, range: range),
       let unitRange = Range(match.range(at: 1), in: text)
     else { return nil }
-    let unit = String(text[unitRange])
-    return unit.isEmpty ? nil : unit
+    let unit = String(text[unitRange]).lowercased()
+    guard measurementUnits.contains(unit) else { return nil }
+    return unit
   }
+
+  private static func trailingDetail(afterQuantityIn text: String) -> String? {
+    let pattern = #"^[0-9]+(?:\.[0-9]+)?\s+(.+)$"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    let range = NSRange(text.startIndex..., in: text)
+    guard let match = regex.firstMatch(in: text, range: range),
+      let detailRange = Range(match.range(at: 1), in: text)
+    else { return nil }
+    let detail = String(text[detailRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    return detail.isEmpty ? nil : detail
+  }
+
+  private static let measurementUnits: Set<String> = [
+    "g", "gram", "grams", "kg", "mg",
+    "oz", "ounce", "ounces", "lb", "lbs", "pound", "pounds",
+    "ml", "l", "liter", "liters", "litre", "litres",
+    "cup", "cups", "tbsp", "tsp", "tablespoon", "tablespoons", "teaspoon", "teaspoons",
+    "serving", "servings", "slice", "slices", "piece", "pieces",
+  ]
 }

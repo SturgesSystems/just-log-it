@@ -30,13 +30,14 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     XCTAssertEqual(identifiers.count, HealthKitNutrientMapping.allMappings.count + 1)
     XCTAssertEqual(Set(identifiers).count, identifiers.count)
     XCTAssertTrue(identifiers.contains("\(entryID.uuidString).food"))
+    XCTAssertTrue(identifiers.contains("\(entryID.uuidString).energy"))
     XCTAssertTrue(identifiers.allSatisfy { $0.hasPrefix(entryID.uuidString + ".") })
   }
 
   @MainActor
   func testCoordinatorKeepsLocalEntryAndMarksSuccessfulWrite() async throws {
     let container = try ModelContainer(
-      for: FoodLogEntryRecord.self,
+      for: FoodLogEntryRecord.self, HealthDeletionTombstone.self, RecognizedFoodRecord.self,
       configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = container.mainContext
@@ -279,7 +280,7 @@ final class HealthKitNutritionWriterTests: XCTestCase {
   @MainActor
   private func makeEntry(status: HealthSyncStatus = .notRequested) throws -> HealthTestStore {
     let container = try ModelContainer(
-      for: FoodLogEntryRecord.self, HealthDeletionTombstone.self,
+      for: FoodLogEntryRecord.self, HealthDeletionTombstone.self, RecognizedFoodRecord.self,
       configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = container.mainContext
@@ -308,17 +309,16 @@ private struct HealthTestStore {
 
 extension HealthAuthorizationSummary {
   fileprivate static let authorized = HealthAuthorizationSummary(
-    authorizedNutrientCount: 1, requestedNutrientCount: 1, canWriteFood: true)
+    authorizedNutrientCount: 1, requestedNutrientCount: 1)
   fileprivate static let denied = HealthAuthorizationSummary(
-    authorizedNutrientCount: 0, requestedNutrientCount: 1, canWriteFood: false)
+    authorizedNutrientCount: 0, requestedNutrientCount: 1)
 }
 
 private actor SuccessfulHealthWriter: HealthNutritionWriting {
   nonisolated let isAvailable = true
 
   func requestAuthorization() async throws -> HealthAuthorizationSummary {
-    HealthAuthorizationSummary(
-      authorizedNutrientCount: 1, requestedNutrientCount: 1, canWriteFood: true)
+    HealthAuthorizationSummary(authorizedNutrientCount: 1, requestedNutrientCount: 1)
   }
 
   func save(

@@ -70,4 +70,21 @@ final class FoodLogEntryRecordTests: XCTestCase {
     XCTAssertNil(record.calories)
     XCTAssertNil(record.protein)
   }
+
+  func testDefaultCompositeFieldsRemainInactiveForSingleFood() throws {
+    let record = try FoodLogEntryRecord(
+      originalText: "Custom food",
+      displayName: "Custom food",
+      quantityDisplay: "1 portion",
+      isApproximate: false,
+      source: .manual,
+      calculationBasis: .manual,
+      nutrients: [NutrientAmount(key: .energy, amount: 200)]
+    )
+
+    XCTAssertFalse(record.isCompositeEntry)
+    XCTAssertNil(record.componentPayload)
+    XCTAssertEqual(record.components, [])
+    XCTAssertNil(record.recognizedFoodID)
+  }
 }

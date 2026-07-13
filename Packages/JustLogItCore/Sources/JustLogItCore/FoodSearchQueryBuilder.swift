@@ -27,15 +27,18 @@ public struct FoodSearchQueryBuilder: Sendable {
       ? ["Branded"] : ["Foundation", "SR Legacy", "Survey (FNDDS)", "Branded"]
     return FoodSearchRequest(
       query: displayQuery, normalizedKey: normalizedKey, dataTypes: types, page: max(1, page),
-      pageSize: 20)
+      pageSize: Self.defaultPageSize)
   }
 
   public func manual(_ input: String, page: Int = 1) -> FoodSearchRequest {
     let query = normalizeDisplay(input)
     return FoodSearchRequest(
       query: query, normalizedKey: normalizedCacheKey(query), dataTypes: [], page: max(1, page),
-      pageSize: 20)
+      pageSize: Self.defaultPageSize)
   }
+
+  /// Matches proxy `MAX_PAGE_SIZE` and USDA-friendly list size for the chat picker.
+  public static let defaultPageSize = 50
 
   public func normalizedCacheKey(_ value: String) -> String {
     value.precomposedStringWithCanonicalMapping

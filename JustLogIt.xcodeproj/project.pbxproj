@@ -13,9 +13,11 @@
 		1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */; };
 		21D874E018370D36C7CE8226 /* FoodLogEntryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A707DD4EE7F9F758DD72E5 /* FoodLogEntryRecord.swift */; };
 		25DAC5DCBD8DBD40A543520F /* FoundationModelsFoodParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */; };
+		33F919BC10E6BCA484EE74F9 /* FoundationModelsImageFoodProposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC78130EB983F13133802E87 /* FoundationModelsImageFoodProposer.swift */; };
 		35C3214746FB3AA42651549F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 484D15BCA66E9AEC885A596B /* PrivacyInfo.xcprivacy */; };
 		3EE5AFFEA7F842B122D31114 /* HealthKitNutritionWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70B5F9D08891552225DCE55A /* HealthKitNutritionWriter.swift */; };
 		3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */; };
+		4E292160B38BCE9A41341F32 /* RecognizedFoodRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A96ABE08AAC8DCE9ADD69F22 /* RecognizedFoodRecordTests.swift */; };
 		5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */; };
 		5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */; };
 		63CE1390C8F131BB4922202E /* QuantityClarificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F243DAD4CF85F4337D29912 /* QuantityClarificationTests.swift */; };
@@ -25,10 +27,15 @@
 		916AB18574E9D1BA032575CF /* LocalizedNumberParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DCB8D2984BD6226043E498F /* LocalizedNumberParser.swift */; };
 		97D18AA5F6BEDD5D0E08B6B0 /* EntriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */; };
 		A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */; };
+		A282DAF0622C8C4A481AFB8F /* ModelContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C62A7946DB8839D84E294B8A /* ModelContainerFactory.swift */; };
+		A6D09228146BA21320C9595D /* RecognizedFoodRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35A704C1D2467220235B6DF5 /* RecognizedFoodRecord.swift */; };
+		B6D378FD63211BB73E0BF25C /* LogConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F398988B5DCE71A35320BF /* LogConversationTests.swift */; };
 		C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */; };
+		CA827EE043EC29D295270C66 /* AppNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CEC79573A54AC93CBC3505D /* AppNavigation.swift */; };
 		D655900728AE50A126704D77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */; };
 		DE729E4DC6B4089659990870 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732C04D059CA7E11ECFD1BA2 /* LogView.swift */; };
 		DF8AAFF5BD6E750DFA4B64AF /* JustLogItCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD5A1548729A45D85221424B /* JustLogItCore */; };
+		E6C4B32E7C385C17D5C19A87 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = D52329456A09CC55D7451971 /* ObjCExceptionCatcher.m */; };
 		E8704AACDAD8B09D1546FB0F /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CE54B5F8B5B1F1C460FBA91 /* HealthKit.framework */; };
 		ED3B539849DA1696772A4AEA /* RememberedFoodStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */; };
 		EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */; };
@@ -61,9 +68,13 @@
 /* Begin PBXFileReference section */
 		0A6FB2A0473C69261D67065C /* JustLogItApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JustLogItApp.swift; sourceTree = "<group>"; };
 		132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCachedFoodDataProviderTests.swift; sourceTree = "<group>"; };
+		1CEC79573A54AC93CBC3505D /* AppNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigation.swift; sourceTree = "<group>"; };
+		1FA27F2CE39016844910FAF8 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModelConcurrencyTests.swift; sourceTree = "<group>"; };
 		2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsFoodParser.swift; sourceTree = "<group>"; };
 		2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModelClarificationPolicyTests.swift; sourceTree = "<group>"; };
+		2CBFFF25547D3BC55082B914 /* JustLogIt-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "JustLogIt-Bridging-Header.h"; sourceTree = "<group>"; };
+		35A704C1D2467220235B6DF5 /* RecognizedFoodRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizedFoodRecord.swift; sourceTree = "<group>"; };
 		38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncCoordinator.swift; sourceTree = "<group>"; };
 		479976FA1AD288FB67EEAC7D /* RememberedFoodStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RememberedFoodStore.swift; sourceTree = "<group>"; };
@@ -86,10 +97,15 @@
 		A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLogEntryRecordTests.swift; sourceTree = "<group>"; };
 		A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedNumberParserTests.swift; sourceTree = "<group>"; };
+		A6F398988B5DCE71A35320BF /* LogConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogConversationTests.swift; sourceTree = "<group>"; };
+		A96ABE08AAC8DCE9ADD69F22 /* RecognizedFoodRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecognizedFoodRecordTests.swift; sourceTree = "<group>"; };
 		B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntriesView.swift; sourceTree = "<group>"; };
 		BC30CF9CD057A7706721B8CA /* JustLogIt.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JustLogIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C62A7946DB8839D84E294B8A /* ModelContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelContainerFactory.swift; sourceTree = "<group>"; };
 		C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserEvaluationHarnessTests.swift; sourceTree = "<group>"; };
 		CC56D7723ED1D3109BAAA332 /* HealthKitNutritionWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitNutritionWriterTests.swift; sourceTree = "<group>"; };
+		D52329456A09CC55D7451971 /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
+		DC78130EB983F13133802E87 /* FoundationModelsImageFoodProposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsImageFoodProposer.swift; sourceTree = "<group>"; };
 		DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserEvaluationCorpus.swift; sourceTree = "<group>"; };
@@ -173,9 +189,13 @@
 			children = (
 				DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */,
 				2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */,
+				DC78130EB983F13133802E87 /* FoundationModelsImageFoodProposer.swift */,
 				70B5F9D08891552225DCE55A /* HealthKitNutritionWriter.swift */,
 				3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */,
+				2CBFFF25547D3BC55082B914 /* JustLogIt-Bridging-Header.h */,
 				5DCB8D2984BD6226043E498F /* LocalizedNumberParser.swift */,
+				1FA27F2CE39016844910FAF8 /* ObjCExceptionCatcher.h */,
+				D52329456A09CC55D7451971 /* ObjCExceptionCatcher.m */,
 				479976FA1AD288FB67EEAC7D /* RememberedFoodStore.swift */,
 				9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */,
 			);
@@ -185,6 +205,7 @@
 		6001A05E7A99ECD864DBE280 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				1CEC79573A54AC93CBC3505D /* AppNavigation.swift */,
 				0A6FB2A0473C69261D67065C /* JustLogItApp.swift */,
 				EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */,
 			);
@@ -224,6 +245,8 @@
 			isa = PBXGroup;
 			children = (
 				85A707DD4EE7F9F758DD72E5 /* FoodLogEntryRecord.swift */,
+				C62A7946DB8839D84E294B8A /* ModelContainerFactory.swift */,
+				35A704C1D2467220235B6DF5 /* RecognizedFoodRecord.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -260,11 +283,13 @@
 				A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */,
 				CC56D7723ED1D3109BAAA332 /* HealthKitNutritionWriterTests.swift */,
 				A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */,
+				A6F398988B5DCE71A35320BF /* LogConversationTests.swift */,
 				2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */,
 				246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */,
 				F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */,
 				C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */,
 				8F243DAD4CF85F4337D29912 /* QuantityClarificationTests.swift */,
+				A96ABE08AAC8DCE9ADD69F22 /* RecognizedFoodRecordTests.swift */,
 				8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */,
 			);
 			path = JustLogItTests;
@@ -451,9 +476,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				F6DFDD23A1DBD11E3F4CB683 /* AppConfiguration.swift in Sources */,
+				CA827EE043EC29D295270C66 /* AppNavigation.swift in Sources */,
 				97D18AA5F6BEDD5D0E08B6B0 /* EntriesView.swift in Sources */,
 				21D874E018370D36C7CE8226 /* FoodLogEntryRecord.swift in Sources */,
 				25DAC5DCBD8DBD40A543520F /* FoundationModelsFoodParser.swift in Sources */,
+				33F919BC10E6BCA484EE74F9 /* FoundationModelsImageFoodProposer.swift in Sources */,
 				3EE5AFFEA7F842B122D31114 /* HealthKitNutritionWriter.swift in Sources */,
 				8E8D609947A73371AB2317DB /* HealthSyncCoordinator.swift in Sources */,
 				68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */,
@@ -461,6 +488,9 @@
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,
+				A282DAF0622C8C4A481AFB8F /* ModelContainerFactory.swift in Sources */,
+				E6C4B32E7C385C17D5C19A87 /* ObjCExceptionCatcher.m in Sources */,
+				A6D09228146BA21320C9595D /* RecognizedFoodRecord.swift in Sources */,
 				03552A486D17E12563D3C98A /* RememberedFoodStore.swift in Sources */,
 				3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */,
 				FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */,
@@ -485,11 +515,13 @@
 				5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */,
 				7D396A00AD9CB18938B2FB65 /* HealthKitNutritionWriterTests.swift in Sources */,
 				F9A697CF039AC437D93FEB79 /* LocalizedNumberParserTests.swift in Sources */,
+				B6D378FD63211BB73E0BF25C /* LogConversationTests.swift in Sources */,
 				F8DC93778FBD8B14AF0D4E68 /* LogViewModelClarificationPolicyTests.swift in Sources */,
 				1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */,
 				EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */,
 				A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */,
 				63CE1390C8F131BB4922202E /* QuantityClarificationTests.swift in Sources */,
+				4E292160B38BCE9A41341F32 /* RecognizedFoodRecordTests.swift in Sources */,
 				ED3B539849DA1696772A4AEA /* RememberedFoodStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -514,6 +546,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = JustLogIt/Resources/JustLogIt.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -525,6 +558,7 @@
 				PRODUCT_NAME = JustLogIt;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "JustLogIt/Services/JustLogIt-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
@@ -565,6 +599,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = JustLogIt/Resources/JustLogIt.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -576,6 +611,7 @@
 				PRODUCT_NAME = JustLogIt;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
+				SWIFT_OBJC_BRIDGING_HEADER = "JustLogIt/Services/JustLogIt-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;

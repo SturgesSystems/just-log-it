@@ -24,10 +24,19 @@ final class LoggingFlowUITests: XCTestCase {
     XCTAssertTrue(result.waitForExistence(timeout: 5))
     result.tap()
 
-    let saveButton = app.buttons["save-entry"]
-    XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
+    let continueReview = app.buttons["continue-from-review"]
+    XCTAssertTrue(continueReview.waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["Review entry"].exists)
     XCTAssertTrue(app.staticTexts["Eggs, scrambled"].exists)
+    continueReview.tap()
+
+    let justNow = app.buttons["when-eaten-suggestion"].firstMatch
+    XCTAssertTrue(justNow.waitForExistence(timeout: 5))
+    justNow.tap()
+
+    let saveButton = app.buttons["save-entry"]
+    XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["Confirm log"].exists)
     saveButton.tap()
 
     let savedStatus = app.descendants(matching: .any)["status-message"]
@@ -61,11 +70,16 @@ final class LoggingFlowUITests: XCTestCase {
     XCTAssertTrue(app.navigationBars["JustLogIt"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["What did you eat?"].exists)
     XCTAssertFalse(app.staticTexts["Log Food"].exists)
-    XCTAssertTrue(app.staticTexts["Your food log stays on this iPhone"].exists)
+    XCTAssertTrue(
+      app.staticTexts["Your food log stays on this iPhone"].exists
+        || app.staticTexts["On-device chat · log stays on this iPhone"].exists
+    )
 
-    let manualEntry = app.buttons["manual-entry-button"]
-    XCTAssertTrue(manualEntry.exists)
-    XCTAssertEqual(manualEntry.label, "Enter nutrition manually")
+    let plusMenu = app.buttons["composer-plus-menu"]
+    XCTAssertTrue(plusMenu.exists)
+    plusMenu.tap()
+    let manualEntry = app.buttons["Enter nutrition manually"]
+    XCTAssertTrue(manualEntry.waitForExistence(timeout: 2))
   }
 
   func testParserFailureShowsSingleRecoveryPath() {
@@ -88,8 +102,11 @@ final class LoggingFlowUITests: XCTestCase {
 
   func testManualEntryValidationAndKeyboardDismissal() {
     let app = launchApp()
-    let manualEntry = app.buttons["manual-entry-button"]
-    XCTAssertTrue(manualEntry.waitForExistence(timeout: 5))
+    let plusMenu = app.buttons["composer-plus-menu"]
+    XCTAssertTrue(plusMenu.waitForExistence(timeout: 5))
+    plusMenu.tap()
+    let manualEntry = app.buttons["Enter nutrition manually"]
+    XCTAssertTrue(manualEntry.waitForExistence(timeout: 2))
     manualEntry.tap()
 
     let name = app.textFields["manual-name"]

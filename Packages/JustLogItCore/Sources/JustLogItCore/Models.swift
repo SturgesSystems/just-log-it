@@ -18,6 +18,16 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
   public var isApproximate: Bool
   public var containsMultipleFoods: Bool
   public var ambiguityNotes: String?
+  /// Distinct foods to look up separately for a composite log (e.g. cereal, milk).
+  public var componentNames: [String]
+  /// Model judgment: amount is missing or only vague and should be asked before search.
+  public var quantityNeedsClarification: Bool
+  /// Model judgment: preparation/cook method was not stated but would change lookup.
+  public var preparationNeedsClarification: Bool
+  /// Model-authored user-facing question. Non-empty means soft-clarify before USDA.
+  public var clarificationPrompt: String?
+  /// Model-authored optional chips for `clarificationPrompt` (may be empty).
+  public var clarificationSuggestions: [String]
 
   public init(
     brand: String? = nil,
@@ -36,7 +46,12 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
     descriptors: [String] = [],
     isApproximate: Bool = false,
     containsMultipleFoods: Bool = false,
-    ambiguityNotes: String? = nil
+    ambiguityNotes: String? = nil,
+    componentNames: [String] = [],
+    quantityNeedsClarification: Bool = false,
+    preparationNeedsClarification: Bool = false,
+    clarificationPrompt: String? = nil,
+    clarificationSuggestions: [String] = []
   ) {
     self.brand = brand
     self.productName = productName
@@ -55,6 +70,11 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
     self.isApproximate = isApproximate
     self.containsMultipleFoods = containsMultipleFoods
     self.ambiguityNotes = ambiguityNotes
+    self.componentNames = componentNames
+    self.quantityNeedsClarification = quantityNeedsClarification
+    self.preparationNeedsClarification = preparationNeedsClarification
+    self.clarificationPrompt = clarificationPrompt
+    self.clarificationSuggestions = clarificationSuggestions
   }
 }
 
@@ -70,7 +90,7 @@ public struct FoodSearchRequest: Sendable, Equatable, Codable {
   public var pageSize: Int
 
   public init(
-    query: String, normalizedKey: String, dataTypes: [String], page: Int = 1, pageSize: Int = 20
+    query: String, normalizedKey: String, dataTypes: [String], page: Int = 1, pageSize: Int = 50
   ) {
     self.query = query
     self.normalizedKey = normalizedKey

@@ -168,7 +168,7 @@ struct SettingsView: View {
         Text("Apple Health")
       } footer: {
         Text(
-          "Optional and off by default. JustLogIt requests write-only access and saves each supported nutrient from a confirmed food entry. Added sugar remains in JustLogIt because Apple Health has no separate added-sugar field."
+          "Optional and off by default. JustLogIt asks to write dietary nutrients, then saves each confirmed entry as one Food item in Apple Health (grouped calories, protein, carbs, fat, and related types you allow). Added sugar stays in JustLogIt only — Health has no separate field for it."
         )
       }
 

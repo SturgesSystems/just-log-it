@@ -76,7 +76,7 @@ private actor USDAFoodDataProvider: FoodDataProviding {
   }
 
   func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
-    guard !request.query.isEmpty, (1...25).contains(request.pageSize), request.page > 0 else {
+    guard !request.query.isEmpty, (1...50).contains(request.pageSize), request.page > 0 else {
       throw FoodDataError.invalidRequest
     }
     var urlRequest = try searchURLRequest(request)
@@ -312,27 +312,59 @@ private struct USDAFoodDetailsDTO: Decodable {
   let publicationDate: String?
   let foodNutrients: [USDAFoodNutrientDTO]?
   let labelNutrients: USDALabelNutrientsDTO?
+  let foodPortions: [USDAFoodPortionDTO]?
 
   var domain: FoodDetails {
     let per100Grams = NutrientMapper.canonicalize(foodNutrients ?? [])
     let labeledServing = labelNutrients?.domain ?? []
+    let resolved = FoodPortionServing.resolve(
+      servingSize: servingSize,
+      servingSizeUnit: servingSizeUnit,
+      householdServing: householdServingFullText,
+      portions: (foodPortions ?? []).map(\.domain)
+    )
     let perServing = NutrientMapper.mergedServingNutrients(
       label: labeledServing,
       per100Grams: per100Grams,
-      servingSize: servingSize,
-      servingSizeUnit: servingSizeUnit
+      servingSize: resolved.servingSize,
+      servingSizeUnit: resolved.servingSizeUnit
     )
     return FoodDetails(
       fdcID: fdcId,
       description: description,
       brandOwner: brandOwner,
       dataType: dataType,
-      servingSize: servingSize,
-      servingSizeUnit: servingSizeUnit,
-      householdServing: householdServingFullText,
+      servingSize: resolved.servingSize,
+      servingSizeUnit: resolved.servingSizeUnit,
+      householdServing: resolved.householdServing,
       nutrientsPer100Grams: per100Grams,
       nutrientsPerServing: perServing,
       publicationDate: publicationDate
+    )
+  }
+}
+
+private struct USDAFoodPortionDTO: Decodable {
+  struct MeasureUnitDTO: Decodable {
+    let name: String?
+    let abbreviation: String?
+  }
+
+  let gramWeight: Double?
+  let amount: Double?
+  let value: Double?
+  let modifier: String?
+  let portionDescription: String?
+  let measureUnit: MeasureUnitDTO?
+
+  var domain: USDAFoodPortion {
+    USDAFoodPortion(
+      gramWeight: gramWeight,
+      amount: amount ?? value,
+      modifier: modifier,
+      portionDescription: portionDescription,
+      measureUnitName: measureUnit?.name,
+      measureUnitAbbreviation: measureUnit?.abbreviation
     )
   }
 }

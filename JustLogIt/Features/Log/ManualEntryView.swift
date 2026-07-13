@@ -90,7 +90,6 @@ struct ManualEntryView: View {
           Button("Next", systemImage: "chevron.down") { moveFocus(by: 1) }
             .disabled(focusedField == Field.allCases.last)
           Spacer()
-          Button("Done") { focusedField = nil }
         }
       }
     }
@@ -159,6 +158,8 @@ struct ManualEntryView: View {
         nutrients: nutrients
       )
       modelContext.insert(entry)
+      let recognized = try RecognizedFoodRecord.upsert(from: entry, in: modelContext)
+      entry.recognizedFoodID = recognized.id
       try modelContext.save()
       onSaved()
       dismiss()

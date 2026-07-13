@@ -138,6 +138,8 @@ public struct ClarificationQuestion: Sendable, Equatable, Codable {
 /// Policy outcome for a draft before USDA lookup or nutrition work.
 public enum ClarificationDecision: Sendable, Equatable {
   case proceed(ParsedFoodRequest)
+  /// Multi-food meal: look up each component, then save one composite entry.
+  case beginComposite(componentNames: [String], sourceText: String)
   case clarify(ClarificationQuestion)
   case requireEdit(String)
   case fallbackManual(String)
@@ -169,6 +171,12 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
   public var isApproximate: Bool
   public var containsMultipleFoods: Bool
   public var ambiguityNotes: String?
+  public var componentNames: [String]
+  /// Copied from model output; soft clarify uses `clarificationPrompt` only.
+  public var quantityNeedsClarification: Bool
+  public var preparationNeedsClarification: Bool
+  public var clarificationPrompt: String?
+  public var clarificationSuggestions: [String]
 
   public var findings: [ValidationFinding]
   public var ambiguities: [AmbiguityCode]
@@ -195,6 +203,11 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
     isApproximate: Bool = false,
     containsMultipleFoods: Bool = false,
     ambiguityNotes: String? = nil,
+    componentNames: [String] = [],
+    quantityNeedsClarification: Bool = false,
+    preparationNeedsClarification: Bool = false,
+    clarificationPrompt: String? = nil,
+    clarificationSuggestions: [String] = [],
     findings: [ValidationFinding] = [],
     ambiguities: [AmbiguityCode] = []
   ) {
@@ -218,6 +231,11 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
     self.isApproximate = isApproximate
     self.containsMultipleFoods = containsMultipleFoods
     self.ambiguityNotes = ambiguityNotes
+    self.componentNames = componentNames
+    self.quantityNeedsClarification = quantityNeedsClarification
+    self.preparationNeedsClarification = preparationNeedsClarification
+    self.clarificationPrompt = clarificationPrompt
+    self.clarificationSuggestions = clarificationSuggestions
     self.findings = findings
     self.ambiguities = ambiguities
   }
@@ -278,7 +296,18 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
       descriptors: descriptors.value,
       isApproximate: isApproximate,
       containsMultipleFoods: containsMultipleFoods,
-      ambiguityNotes: ambiguityNotes
+      ambiguityNotes: ambiguityNotes,
+      componentNames: componentNames,
+      quantityNeedsClarification: quantityNeedsClarification,
+      preparationNeedsClarification: preparationNeedsClarification,
+      clarificationPrompt: clarificationPrompt,
+      clarificationSuggestions: clarificationSuggestions
     )
+  }
+
+  /// Non-empty model-authored clarification question, if any.
+  public var modelClarificationPrompt: String? {
+    let trimmed = clarificationPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
