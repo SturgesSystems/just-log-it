@@ -48,6 +48,7 @@ struct ManualEntryView: View {
             .accessibilityIdentifier("manual-amount")
           DatePicker("Date and time", selection: $consumedAt)
           Toggle("Approximate", isOn: $approximate)
+            .accessibilityHint("Marks the amount as estimated")
         }
         Section {
           numericField("Calories", text: $calories, unit: "kcal", field: .calories)

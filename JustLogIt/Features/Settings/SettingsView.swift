@@ -76,7 +76,7 @@ struct SettingsView: View {
   var body: some View {
     List {
       Section("Food data") {
-        LabeledContent("Provider", value: configuration.providerDescription)
+        LabeledContent("Provider", value: providerDisplayDescription)
 
         if configuration.providerDescription == "Not configured" {
           Label {
@@ -152,6 +152,17 @@ struct SettingsView: View {
       Button("OK", role: .cancel) { cacheResultMessage = nil }
     } message: {
       Text(cacheResultMessage ?? "")
+    }
+  }
+
+  private var providerDisplayDescription: String {
+    switch configuration.providerDescription {
+    case "Privacy proxy":
+      "USDA search (private connection)"
+    case "Direct USDA (Debug)":
+      "USDA search (debug)"
+    default:
+      configuration.providerDescription
     }
   }
 

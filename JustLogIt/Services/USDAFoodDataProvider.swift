@@ -176,7 +176,7 @@ private actor USDAFoodDataProvider: FoodDataProviding {
   }
 }
 
-private actor DiskCachedFoodDataProvider: FoodDataProviding {
+actor DiskCachedFoodDataProvider: FoodDataProviding {
   private struct Envelope<Value: Codable & Sendable>: Codable, Sendable {
     let value: Value
     let expiresAt: Date
@@ -184,15 +184,25 @@ private actor DiskCachedFoodDataProvider: FoodDataProviding {
 
   private let upstream: any FoodDataProviding
   private let directory: URL
+  private let now: @Sendable () -> Date
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
-  init(upstream: any FoodDataProviding) {
+  init(
+    upstream: any FoodDataProviding,
+    directory: URL? = nil,
+    now: @escaping @Sendable () -> Date = { .now }
+  ) {
     self.upstream = upstream
-    let base =
-      FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-      ?? FileManager.default.temporaryDirectory
-    directory = base.appending(path: "JustLogItFoodData", directoryHint: .isDirectory)
+    self.now = now
+    if let directory {
+      self.directory = directory
+    } else {
+      let base =
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        ?? FileManager.default.temporaryDirectory
+      self.directory = base.appending(path: "JustLogItFoodData", directoryHint: .isDirectory)
+    }
   }
 
   func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
@@ -218,7 +228,7 @@ private actor DiskCachedFoodDataProvider: FoodDataProviding {
   private func read<Value: Codable & Sendable>(_ url: URL) -> Value? {
     guard let data = try? Data(contentsOf: url),
       let envelope = try? decoder.decode(Envelope<Value>.self, from: data),
-      envelope.expiresAt > .now
+      envelope.expiresAt > now()
     else { return nil }
     return envelope.value
   }
@@ -226,7 +236,7 @@ private actor DiskCachedFoodDataProvider: FoodDataProviding {
   private func write<Value: Codable & Sendable>(_ value: Value, to url: URL, ttl: TimeInterval) {
     do {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let envelope = Envelope(value: value, expiresAt: .now.addingTimeInterval(ttl))
+      let envelope = Envelope(value: value, expiresAt: now().addingTimeInterval(ttl))
       try encoder.encode(envelope).write(to: url, options: .atomic)
     } catch {
       // Cache failure must never prevent a food lookup.

@@ -17,9 +17,11 @@
 - [x] Parser evaluation corpus/harness and documentation exist; production remains the default prompt
 - [ ] Prompt evaluations against the final iOS 27 system model on an eligible device
 - [x] Cache reads fail open and Settings provides a confirmed cache-clear action
-- [ ] Add automated corrupted-cache, expiry, write-failure, and disk-pressure recovery tests
+- [x] Automated corrupted-cache, expiry, and write-failure recovery tests (`DiskCachedFoodDataProviderTests`)
+- [ ] Real-device disk-pressure recovery observation (Simulator/device acceptance)
 - [x] Configure a non-placeholder AppIcon asset in the application target
 - [ ] Complete final icon rendering review, screenshots, attribution, and App Store metadata
-- [ ] Secret scan of repository and archived release binary
+- [x] Source secret scan of repository (`Scripts/scan-repository-secrets.sh`; git-tracked files only)
+- [ ] Secret scan of archived release binary
 
 The checked items describe repository implementation, not deployment or App Store acceptance. Production Worker/privacy configuration, physical-device behavior, and final visual/accessibility review remain launch gates.

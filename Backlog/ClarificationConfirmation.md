@@ -66,15 +66,17 @@ The model may propose. Deterministic code validates and routes. The user resolve
 
 ### Phase 1 — Typed state and validators
 
-- Define evidence, provenance, confidence, ambiguity, question, answer, and confirmed-request types.
-- Move quantity/unit/container grounding and locale validation behind a reusable validator.
-- Add a deterministic policy that decides confirm, clarify, edit, or fallback.
+- [x] Define evidence, provenance, confidence, ambiguity, question, answer, and confirmed-request types (`ClarificationModels`)
+- [x] Add a deterministic validator for identity, multiple foods, and invalid quantities (`FoodInterpretationValidator`)
+- [x] Add a deterministic policy that decides proceed / clarify / requireEdit / fallbackManual (`ClarificationPolicy`)
+- [x] Package tests cover proceed, empty identity, multiple foods, invalid quantity strip, max turns, and confirm-only confidence
+- [ ] Move locale-aware quantity parsing fully behind a shared Core validator (app still owns `LocalizedNumberParser`)
 
 ### Phase 2 — Text integration
 
-- Route current Foundation Models output through the engine.
-- Replace one-off clarification states with generic question/answer state while preserving USDA and manual fallbacks.
-- Instrument clarification count, abandonment, and correction locally in test builds only; add no analytics.
+- [x] Route current Foundation Models output through the engine before USDA search (thin `LogViewModel` gate; policy blocks empty identity / multi-food silent proceed)
+- [ ] Replace one-off clarification states with generic question/answer UI while preserving USDA and manual fallbacks
+- [ ] Instrument clarification count, abandonment, and correction locally in test builds only; add no analytics
 
 ### Phase 3 — Composite and photo adapters
 

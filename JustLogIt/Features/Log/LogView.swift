@@ -277,7 +277,7 @@ struct LogView: View {
       }
       .pickerStyle(.segmented)
 
-      LabeledContent(quantityMode == .servings ? "Number of servings" : "Consumed mass") {
+      LabeledContent(quantityMode == .servings ? "Number of servings" : "Amount (grams)") {
         HStack(spacing: 6) {
           TextField(
             quantityMode == .servings ? "1" : "100",
@@ -288,6 +288,7 @@ struct LogView: View {
           .multilineTextAlignment(.trailing)
           .focused($focusedField, equals: .quantity)
           .frame(minWidth: 56)
+          .accessibilityIdentifier("quantity-value")
           Text(quantityMode == .servings ? "servings" : "g")
             .foregroundStyle(.secondary)
         }
@@ -309,7 +310,7 @@ struct LogView: View {
       }
       .buttonStyle(.borderedProminent)
       .controlSize(.large)
-      .disabled(activeQuantity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .disabled(!model.canResolveClarificationQuantity(usingServings: quantityMode == .servings))
 
       Menu("Other Options", systemImage: "ellipsis.circle") {
         Button("Choose a Different Food", systemImage: "arrow.uturn.backward") {
@@ -322,10 +323,6 @@ struct LogView: View {
     }
     .padding(16)
     .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
-  }
-
-  private var activeQuantity: String {
-    quantityMode == .servings ? model.clarificationServings : model.clarificationGrams
   }
 
   private var nutritionReview: some View {
@@ -572,6 +569,7 @@ struct LogView: View {
       .clipShape(.circle)
       .disabled(model.manualSearchTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       .accessibilityLabel("Search USDA")
+      .accessibilityIdentifier("search-usda-button")
     }
   }
 
@@ -815,7 +813,7 @@ extension FoodSearchResult {
   fileprivate var shortDataType: String {
     if dataType.localizedCaseInsensitiveContains("branded") { return "Branded" }
     if dataType.localizedCaseInsensitiveContains("survey") { return "Survey" }
-    if dataType.localizedCaseInsensitiveContains("foundation") { return "Foundation" }
+    if dataType.localizedCaseInsensitiveContains("foundation") { return "Foundation food" }
     return dataType
   }
 }

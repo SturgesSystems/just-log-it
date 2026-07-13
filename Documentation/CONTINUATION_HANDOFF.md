@@ -4,7 +4,7 @@ Last updated: 2026-07-12, America/New_York (successor update)
 Prepared because the primary Codex task was approaching its weekly usage limit.  
 Audience: a new implementation agent with no reliable access to the preceding conversation.
 
-**Successor status (Grok session):** The previously dirty Release + parser-eval tranches were already committed as `0128af4`. This session formatted the harness, fixed Release post-build sandbox inputs, verified Debug/Release builds and focused tests, documented parser evaluation, and implemented Worker transport/quota hardening. Repo path is `/Users/james/Developer/just-log-it` (not `Documents/JustLogIt`).
+**Successor status (Grok session):** Launch gates, Worker hardening, cache recovery tests, Clarification Phase 1 + LogViewModel gate, UIBugs ledger hygiene, source secret scan, and static a11y/copy polish are on `main` after `29bfb7a` (and follow-up commits). Repo path is `/Users/james/Developer/just-log-it`. Full Simulator UAT and on-device parser/HealthKit evidence remain open; do not mark UI-001–011 Fixed without manual reproduction.
 
 ## 1. Immediate orientation
 

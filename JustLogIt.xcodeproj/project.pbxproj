@@ -30,10 +30,12 @@
 		E8704AACDAD8B09D1546FB0F /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CE54B5F8B5B1F1C460FBA91 /* HealthKit.framework */; };
 		EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */; };
 		F6DFDD23A1DBD11E3F4CB683 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */; };
+		F8DC93778FBD8B14AF0D4E68 /* LogViewModelClarificationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */; };
 		F99D80FD1D8805ED00A6F2A3 /* USDAFoodDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */; };
 		F9A697CF039AC437D93FEB79 /* LocalizedNumberParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */; };
 		FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02B213898318058E4263A83 /* AppConfigurationTests.swift */; };
 		FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D05C6A2EE7E7258B152170E /* SettingsView.swift */; };
+		FFB8BBBA3A6C9A08F1F4058D /* DiskCachedFoodDataProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -55,8 +57,10 @@
 
 /* Begin PBXFileReference section */
 		0A6FB2A0473C69261D67065C /* JustLogItApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JustLogItApp.swift; sourceTree = "<group>"; };
+		132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCachedFoodDataProviderTests.swift; sourceTree = "<group>"; };
 		246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModelConcurrencyTests.swift; sourceTree = "<group>"; };
 		2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsFoodParser.swift; sourceTree = "<group>"; };
+		2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModelClarificationPolicyTests.swift; sourceTree = "<group>"; };
 		38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncCoordinator.swift; sourceTree = "<group>"; };
 		484D15BCA66E9AEC885A596B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -245,9 +249,11 @@
 			isa = PBXGroup;
 			children = (
 				A02B213898318058E4263A83 /* AppConfigurationTests.swift */,
+				132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */,
 				A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */,
 				CC56D7723ED1D3109BAAA332 /* HealthKitNutritionWriterTests.swift */,
 				A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */,
+				2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */,
 				246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */,
 				F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */,
 				C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */,
@@ -465,9 +471,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */,
+				FFB8BBBA3A6C9A08F1F4058D /* DiskCachedFoodDataProviderTests.swift in Sources */,
 				5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */,
 				7D396A00AD9CB18938B2FB65 /* HealthKitNutritionWriterTests.swift in Sources */,
 				F9A697CF039AC437D93FEB79 /* LocalizedNumberParserTests.swift in Sources */,
+				F8DC93778FBD8B14AF0D4E68 /* LogViewModelClarificationPolicyTests.swift in Sources */,
 				1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */,
 				EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */,
 				A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */,

@@ -177,6 +177,28 @@ private struct EntryRow: View {
     }
     .padding(.vertical, 3)
     .accessibilityElement(children: .combine)
+    .accessibilityLabel(rowAccessibilityLabel)
+  }
+
+  private var rowAccessibilityLabel: String {
+    var parts = [entry.displayName]
+    if let brand = entry.brand, !brand.isEmpty {
+      parts.append(brand)
+    }
+    if let calories = entry.calories {
+      parts.append(
+        "\(calories.formatted(.number.precision(.fractionLength(0)))) calories"
+      )
+    }
+    parts.append(entry.quantityDisplay)
+    if let protein = entry.protein {
+      parts.append(
+        "\(protein.formatted(.number.precision(.fractionLength(0...1)))) g protein"
+      )
+    }
+    parts.append(entry.source.rawValue)
+    parts.append(entry.consumedAt.formatted(.dateTime.hour().minute()))
+    return parts.joined(separator: ", ")
   }
 
   @ViewBuilder
@@ -258,7 +280,7 @@ private struct EntryDetailView: View {
             LabeledContent("Food", value: description)
           }
           if let dataType = entry.usdaDataType {
-            LabeledContent("Data type", value: dataType)
+            LabeledContent("Data type", value: humanizedDataType(dataType))
           }
           if let fdcID = entry.fdcID {
             LabeledContent("FDC ID", value: String(fdcID))
@@ -266,13 +288,13 @@ private struct EntryDetailView: View {
           LabeledContent("Calculation", value: calculationDescription)
           if let grams = entry.consumedGrams {
             LabeledContent(
-              "Consumed mass",
+              "Amount (grams)",
               value: "\(grams.formatted(.number.precision(.fractionLength(0...1)))) g"
             )
           }
           if let multiplier = entry.servingMultiplier {
             LabeledContent(
-              "Serving multiplier",
+              "Servings logged",
               value: multiplier.formatted(.number.precision(.fractionLength(0...2)))
             )
           }
@@ -314,6 +336,16 @@ private struct EntryDetailView: View {
     } message: {
       Text(healthRetryOutcome?.message ?? "Apple Health couldn’t be updated.")
     }
+  }
+
+  private func humanizedDataType(_ dataType: String) -> String {
+    let cleaned = dataType.trimmingCharacters(in: .whitespacesAndNewlines)
+    if cleaned.localizedCaseInsensitiveContains("branded") { return "Branded" }
+    if cleaned.localizedCaseInsensitiveContains("foundation") { return "Foundation food" }
+    if cleaned.localizedCaseInsensitiveContains("survey") { return "Survey" }
+    if cleaned.localizedCaseInsensitiveContains("sr legacy") { return "SR Legacy" }
+    if cleaned.localizedCaseInsensitiveContains("experimental") { return "Experimental" }
+    return cleaned
   }
 
   private var calculationDescription: String {

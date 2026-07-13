@@ -41,14 +41,14 @@ The model output could represent the amount as `0.5 ounce`, causing the resolver
 
 Notes:
 
-The parser guidance now gives explicit fraction/container semantics, and serving resolution now prioritizes `fractionOfWhole × containerSize` over a conflicting primary quantity. Deterministic regression tests cover the incorrect model shape and the household-serving fallback. A real Foundation Model run is still required before this can be marked Fixed.
+The parser guidance now gives explicit fraction/container semantics, and serving resolution now prioritizes `fractionOfWhole × containerSize` over a conflicting primary quantity. Deterministic regression tests cover the incorrect model shape and the household-serving fallback. Automated tests exist; the original real Foundation Model walkthrough remains pending before this can be marked Fixed.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
-- Verified by: Pending
-- Verified on: Pending real-model Simulator run
-- Result: Pending
+- Fix commit: `874df33`
+- Verified by: Automated core regression tests
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-002 — A canceled or superseded Log operation can replace the current UI state
 
@@ -76,14 +76,14 @@ Cancellation is requested, but an underlying operation that returns a non-cancel
 
 Notes:
 
-The view model now invalidates operations with a monotonically increasing generation and ignores canceled or superseded completions. Deterministic tests cover a parser failure after cancellation and an older details failure after a newer selection succeeds. Manual slow-operation verification is still required.
+The view model now invalidates operations with a monotonically increasing generation and ignores canceled or superseded completions. Deterministic tests cover a parser failure after cancellation and an older details failure after a newer selection succeeds. Automated tests exist; manual slow-operation verification of the original reproduction remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Automated app unit tests
-- Verified on: Xcode 27 beta / iOS 27 test target
-- Result: Deterministic regression tests pass; manual verification pending
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Deterministic regression tests pass; manual original reproduction pending
 
 ### UI-003 — Quantity clarification rejects the locale decimal separator
 
@@ -92,7 +92,7 @@ Verification:
 - Owner: Localized-number sub-agent
 - Found in: `bc9d067`, source audit
 - Area: Log / Accessibility
-- Evidence: `resolveWithServings()` and `resolveWithGrams()` parse the field directly with `Double(String)`
+- Evidence: `resolveWithServings()` and `resolveWithGrams()` previously parsed the field directly with `Double(String)`; fixed in code via `LocalizedNumberParser`
 
 Reproduction:
 
@@ -107,18 +107,18 @@ The app accepts the decimal separator presented by the current locale and calcul
 
 Actual:
 
-Direct `Double` parsing rejects the comma value and shows **Enter a valid number of USDA servings.** or **Enter a valid gram amount.**
+Was: direct `Double` parsing rejected the comma value and showed **Enter a valid number of USDA servings.** or **Enter a valid gram amount.** Clarification fields now share `LocalizedNumberParser` with Manual Entry so locale decimal separators are accepted in code.
 
 Notes:
 
-Manual Entry already normalizes `Locale.current.decimalSeparator`; the clarification fields do not.
+Manual Entry already normalized `Locale.current.decimalSeparator`; clarification fields now use the same `LocalizedNumberParser`. Deterministic unit tests cover locale-aware parsing. Automated tests exist; a locale-specific Simulator walkthrough of the original reproduction remains pending.
 
 Verification:
 
-- Fix commit:
-- Verified by:
-- Verified on:
-- Result:
+- Fix commit: `874df33`
+- Verified by: Automated `LocalizedNumberParser` unit tests
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-004 — Apple Health retry can be unavailable or silently do nothing
 
@@ -146,14 +146,14 @@ The visible retry can no-op when the preference is off because the coordinator r
 
 Notes:
 
-Retry now returns a visible outcome. When sync is off, the app explains that it must be enabled and offers Settings; denied and failed entries both expose retry. Retry requests authorization only after the explicit button tap and routes unresolved access to Settings without reading Health data.
+Retry now returns a visible outcome. When sync is off, the app explains that it must be enabled and offers Settings; denied and failed entries both expose retry. Retry requests authorization only after the explicit button tap and routes unresolved access to Settings without reading Health data. Automated Health sync tests exist; Simulator acceptance of the original reproduction remains pending.
 
 Verification:
 
-- Fix commit:
-- Verified by:
-- Verified on:
-- Result: Pending Simulator acceptance pass
+- Fix commit: `874df33`
+- Verified by: Automated HealthKit/coordinator tests
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-005 — Apple Health sync preference is persisted before authorization finishes
 
@@ -181,14 +181,14 @@ The `@AppStorage` value becomes true as soon as the user flips the toggle, befor
 
 Notes:
 
-The Settings model now leaves the durable preference off while authorization is pending and persists it only after authorization reports that food and at least one nutrient can be written. Denial and failure leave both the visible and durable preference off.
+The Settings model now leaves the durable preference off while authorization is pending and persists it only after authorization reports that food and at least one nutrient can be written. Denial and failure leave both the visible and durable preference off. Automated coverage exists for preference gating; the original interruption walkthrough remains pending.
 
 Verification:
 
-- Fix commit:
-- Verified by:
-- Verified on:
-- Result: Pending Simulator acceptance pass
+- Fix commit: `874df33`
+- Verified by: Automated Settings/Health preference tests where present
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Code fix landed; automated tests exist; manual original reproduction pending
 
 ### UI-006 — Fresh Log screen has redundant hierarchy and an unclear manual-entry affordance
 
@@ -215,14 +215,14 @@ The navigation title **Log Food** is followed by the competing large heading **W
 
 Notes:
 
-The navigation bar now uses the compact app name **JustLogIt**, leaving **What did you eat?** as the only task-level heading. The privacy reassurance now reads **Your food log stays on this iPhone**. The bare plus is now a compact bordered **Manual** control with a compose icon, while preserving the **Enter nutrition manually** accessibility label and `manual-entry-button` identifier.
+The navigation bar now uses the compact app name **JustLogIt**, leaving **What did you eat?** as the only task-level heading. The privacy reassurance now reads **Your food log stays on this iPhone**. The bare plus is now a compact bordered **Manual** control with a compose icon, while preserving the **Enter nutrition manually** accessibility label and `manual-entry-button` identifier. Focused UI assertions exist; fresh-launch visual acceptance of the original reproduction remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
-- Verified by: Focused UI assertion added; Simulator execution pending
-- Verified on: Pending
-- Result: Pending fresh-launch visual acceptance pass
+- Fix commit: `874df33`
+- Verified by: Focused UI assertion
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated assertion present; manual original reproduction pending
 
 ### UI-007 — Recovery headline contradicts an on-device interpretation failure
 
@@ -250,14 +250,14 @@ The card headline says **Couldn’t Reach USDA** while its body says **On-device
 
 Notes:
 
-Failure context is now an explicit `LogViewModel.FailureKind` rather than a message-string heuristic. Parser, search, no-result, and details paths assign distinct kinds; the recovery card maps its title and primary action from that kind. Focused unit tests cover each failure boundary. The original real-model walkthrough remains required before this is Fixed.
+Failure context is now an explicit `LogViewModel.FailureKind` rather than a message-string heuristic. Parser, search, no-result, and details paths assign distinct kinds; the recovery card maps its title and primary action from that kind. Focused unit tests cover each failure boundary. Automated tests exist; the original real-model walkthrough remains pending before this is Fixed.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Automated app unit tests
-- Verified on: Xcode 27 beta / iOS 27 test target
-- Result: Pending build/test and original walkthrough
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-008 — Foundation Model facts can leak from a prior food description
 
@@ -285,14 +285,14 @@ The current product was `Oreo cookie`, but generated quantity text and serving f
 
 Notes:
 
-Generated output now passes through a deterministic source-grounding boundary. Product intent, brand, quantity/unit pairs, fraction/whole pairs, container and alternate quantities, quantity text, preparation, descriptors, approximation, and ambiguity notes are removed unless supported by the current source text. Generated search terms are discarded and rebuilt from grounded product intent. Numeric relationships must be forward and remain within one clause, while explicit measurement aliases and mixed written/numeric fractions preserve valid input. Pure adversarial regressions cover stale product and Oreo quantity contamination, cross-food and backward pairs, grounded single-cookie resolution, the valid sized-container case, unit aliases, mixed fractions, and approximation markers.
+Generated output now passes through a deterministic source-grounding boundary. Product intent, brand, quantity/unit pairs, fraction/whole pairs, container and alternate quantities, quantity text, preparation, descriptors, approximation, and ambiguity notes are removed unless supported by the current source text. Generated search terms are discarded and rebuilt from grounded product intent. Numeric relationships must be forward and remain within one clause, while explicit measurement aliases and mixed written/numeric fractions preserve valid input. Pure adversarial regressions cover stale product and Oreo quantity contamination, cross-food and backward pairs, grounded single-cookie resolution, the valid sized-container case, unit aliases, mixed fractions, and approximation markers. Automated core tests exist; the original real-model Simulator walkthrough remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Core regression tests and build-for-testing
-- Verified on: Pending
-- Result: Pending original real-model Simulator walkthrough
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-009 — Composite dishes can outrank the food the person actually named
 
@@ -319,14 +319,14 @@ USDA’s response order can place a McFlurry containing Oreo cookies above an Or
 
 Notes:
 
-Search results now receive a deterministic client-side relevance pass based on parsed product, preparation, descriptors, and an explicitly supplied brand. Complete food-form coverage is rewarded; descriptions that introduce the requested food after words such as `with` or `containing` are demoted as composites. Brand metadata influences ranking only when the parsed request contains a brand. Results are reordered but never removed, and nutrition remains entirely sourced from the selected USDA record.
+Search results now receive a deterministic client-side relevance pass based on parsed product, preparation, descriptors, and an explicitly supplied brand. Complete food-form coverage is rewarded; descriptions that introduce the requested food after words such as `with` or `containing` are demoted as composites. Brand metadata influences ranking only when the parsed request contains a brand. Results are reordered but never removed, and nutrition remains entirely sourced from the selected USDA record. Deterministic core regression tests exist; the original screenshot reproduction remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Deterministic core regression tests
-- Verified on: Xcode 27 beta, generic iOS Simulator build-for-testing
-- Result: Pending original screenshot reproduction
+- Verified on: Xcode 27 beta, generic iOS Simulator build-for-testing (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-010 — Interrupted Apple Health writes can remain pending forever
 
@@ -353,14 +353,14 @@ The entry could remain in **Waiting to sync** indefinitely, with no automatic re
 
 Notes:
 
-Launch and foreground activation now reconcile pending and retryable failed writes only when Health sync remains enabled. Retry count and next-attempt date persist on the entry, automatic attempts stop after three failures, and a content-free banner reports the outcome.
+Launch and foreground activation now reconcile pending and retryable failed writes only when Health sync remains enabled. Retry count and next-attempt date persist on the entry, automatic attempts stop after three failures, and a content-free banner reports the outcome. Protocol-fake reconciliation and bounded-backoff tests exist; the original interruption walkthrough remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Protocol-fake reconciliation and bounded-backoff tests
-- Verified on: Pending Simulator acceptance
-- Result: Pending interruption walkthrough
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ### UI-011 — Deleting a synced entry leaves its Apple Health nutrition behind
 
@@ -387,14 +387,14 @@ The local entry was deleted while its Apple Health copy remained, and no durable
 
 Notes:
 
-Deletion now persists a tombstone before attempting Health cleanup and keeps the local entry until cleanup succeeds. The writer uses exact per-entry `HKMetadataKeySyncIdentifier` predicates across the food correlation and supported nutrient types; HealthKit also restricts deletion to objects written by this app. Failed cleanup persists bounded retry state and remains visible.
+Deletion now persists a tombstone before attempting Health cleanup and keeps the local entry until cleanup succeeds. The writer uses exact per-entry `HKMetadataKeySyncIdentifier` predicates across the food correlation and supported nutrient types; HealthKit also restricts deletion to objects written by this app. Failed cleanup persists bounded retry state and remains visible. Protocol-fake tombstone retention and reconciliation tests exist; the original successful-write/delete walkthrough remains pending.
 
 Verification:
 
-- Fix commit: Pending; fix is currently in the working tree
+- Fix commit: `874df33`
 - Verified by: Protocol-fake tombstone retention and reconciliation tests
-- Verified on: Pending Simulator acceptance
-- Result: Pending successful-write/delete walkthrough
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated tests pass; manual original reproduction pending
 
 ## Bug template
 

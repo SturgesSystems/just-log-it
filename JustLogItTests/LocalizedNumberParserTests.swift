@@ -60,7 +60,18 @@ final class LocalizedNumberParserTests: XCTestCase {
     model.submit()
 
     let clock = ContinuousClock()
-    let deadline = clock.now.advanced(by: .seconds(1))
+    var deadline = clock.now.advanced(by: .seconds(1))
+    while model.stage != .choosing, clock.now < deadline {
+      await Task.yield()
+    }
+    XCTAssertEqual(model.stage, .choosing)
+    guard let result = model.results.first else {
+      XCTFail("Expected USDA results after search")
+      return
+    }
+    model.select(result)
+
+    deadline = clock.now.advanced(by: .seconds(1))
     while model.stage != .clarifying, clock.now < deadline {
       await Task.yield()
     }

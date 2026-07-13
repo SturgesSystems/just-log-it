@@ -16,6 +16,8 @@ Foundation Models / USDA / SwiftData implementations
 
 The Foundation Model may identify food, brand, descriptors, and quantity language. It never supplies nutrition, ranks USDA records, selects a record, or performs persisted arithmetic.
 
+After grounding, a deterministic `ClarificationPolicy` in JustLogItCore decides whether a draft may proceed to USDA search, needs a clarification question, requires edit, or falls back to manual entry. Empty identity and multi-food drafts never silently search. Missing quantity alone still proceeds because portion resolution happens after USDA selection via `ServingResolution`.
+
 `Packages/JustLogItCore` has no SwiftUI, SwiftData, FoundationModels, or HealthKit dependency and can be tested from Command Line Tools.
 
 `HealthKitNutritionWriter` maps every supported USDA nutrient to its exact HealthKit dietary type and writes one food correlation. `HealthSyncCoordinator` keeps logging local-first and persists pending, synced, denied, failed, or deletion-pending state. Authorization is requested only from explicit user actions: enabling sync in Settings or tapping **Try Apple Health Again** for a denied/failed entry. Automatic entry saving and reconciliation never present permission UI, and the app requests write access only.

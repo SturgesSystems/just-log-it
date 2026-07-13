@@ -98,6 +98,11 @@ final class LogViewModel: ObservableObject {
     }
   }
 
+  func canResolveClarificationQuantity(usingServings: Bool) -> Bool {
+    let text = usingServings ? clarificationServings : clarificationGrams
+    return numberParser.parse(text, minimum: .greaterThanZero) != nil
+  }
+
   func resolveWithServings() {
     guard
       let servings = numberParser.parse(clarificationServings, minimum: .greaterThanZero),
@@ -204,15 +209,35 @@ final class LogViewModel: ObservableObject {
     stage = .parsing
     message = nil
     failureKind = nil
-    let parsed: ParsedFoodRequest
+    let request: ParsedFoodRequest
     do {
-      parsed = try await parser.parse(text)
+      let parsed = try await parser.parse(text)
       guard isCurrentOperation(generation) else { return }
-      self.parsed = parsed
-      manualSearchTerms = queryBuilder.build(from: parsed).query
-      if parsed.containsMultipleFoods {
-        message =
-          "This looks like multiple foods. This MVP will continue with the principal food only; the original text will be preserved."
+
+      let draft = FoodInterpretationValidator().draft(
+        from: parsed,
+        sourceText: text,
+        evidenceKind: .typedText
+      )
+      switch ClarificationPolicy().decide(draft) {
+      case .proceed(let proceeded):
+        self.parsed = proceeded
+        manualSearchTerms = queryBuilder.build(from: proceeded).query
+        request = proceeded
+      case .clarify(let question):
+        if manualSearchTerms.isEmpty {
+          manualSearchTerms = text
+        }
+        fail(.interpretation, message: question.prompt)
+        return
+      case .requireEdit(let message):
+        manualSearchTerms = text
+        fail(.interpretation, message: message)
+        return
+      case .fallbackManual(let message):
+        manualSearchTerms = text
+        fail(.interpretation, message: message)
+        return
       }
     } catch is CancellationError {
       return
@@ -231,7 +256,7 @@ final class LogViewModel: ObservableObject {
 
     do {
       try await search(
-        queryBuilder.build(from: parsed), rankingIntent: parsed, generation: generation)
+        queryBuilder.build(from: request), rankingIntent: request, generation: generation)
     } catch is CancellationError {
       return
     } catch {
