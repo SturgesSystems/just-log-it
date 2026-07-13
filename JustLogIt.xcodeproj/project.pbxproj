@@ -1,0 +1,691 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		06369E772A94746D8F320B86 /* LoggingFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */; };
+		12762173FD9DA7E5DEE62B5E /* JustLogItCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACBAA3435265F166E23D8CEA /* JustLogItCore */; };
+		21D874E018370D36C7CE8226 /* FoodLogEntryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A707DD4EE7F9F758DD72E5 /* FoodLogEntryRecord.swift */; };
+		25DAC5DCBD8DBD40A543520F /* FoundationModelsFoodParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */; };
+		3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */; };
+		5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */; };
+		5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */; };
+		68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6FB2A0473C69261D67065C /* JustLogItApp.swift */; };
+		97D18AA5F6BEDD5D0E08B6B0 /* EntriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */; };
+		C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */; };
+		D655900728AE50A126704D77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */; };
+		DE729E4DC6B4089659990870 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732C04D059CA7E11ECFD1BA2 /* LogView.swift */; };
+		DF8AAFF5BD6E750DFA4B64AF /* JustLogItCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD5A1548729A45D85221424B /* JustLogItCore */; };
+		F6DFDD23A1DBD11E3F4CB683 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */; };
+		F99D80FD1D8805ED00A6F2A3 /* USDAFoodDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */; };
+		FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02B213898318058E4263A83 /* AppConfigurationTests.swift */; };
+		FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D05C6A2EE7E7258B152170E /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DD495B9DFDA90F65D79D2083 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B26C9FA232544F952D95490E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 851E538201C24CC235DA78B1;
+			remoteInfo = JustLogIt;
+		};
+		E94B14026045F308AFAF963B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B26C9FA232544F952D95490E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 851E538201C24CC235DA78B1;
+			remoteInfo = JustLogIt;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0A6FB2A0473C69261D67065C /* JustLogItApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JustLogItApp.swift; sourceTree = "<group>"; };
+		265E77F400EAC2AEA5A460D0 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsFoodParser.swift; sourceTree = "<group>"; };
+		38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C9CF7389FA92F0FEB31237B /* JustLogItTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7183579E7FC0F8072948C665 /* JustLogItCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = JustLogItCore; path = Packages/JustLogItCore; sourceTree = SOURCE_ROOT; };
+		732C04D059CA7E11ECFD1BA2 /* LogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogView.swift; sourceTree = "<group>"; };
+		85A707DD4EE7F9F758DD72E5 /* FoodLogEntryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLogEntryRecord.swift; sourceTree = "<group>"; };
+		8D05C6A2EE7E7258B152170E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingFlowUITests.swift; sourceTree = "<group>"; };
+		8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntryView.swift; sourceTree = "<group>"; };
+		9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USDAFoodDataProvider.swift; sourceTree = "<group>"; };
+		A02B213898318058E4263A83 /* AppConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationTests.swift; sourceTree = "<group>"; };
+		A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodLogEntryRecordTests.swift; sourceTree = "<group>"; };
+		A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntriesView.swift; sourceTree = "<group>"; };
+		BC30CF9CD057A7706721B8CA /* JustLogIt.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JustLogIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		036534D9429FF63CE8D896EE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF8AAFF5BD6E750DFA4B64AF /* JustLogItCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		65B85DC144F98BBD0525EB61 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				12762173FD9DA7E5DEE62B5E /* JustLogItCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000136AC39E6678C67FC3BE4 = {
+			isa = PBXGroup;
+			children = (
+				1305B3EB705396C73E8AF032 /* Config */,
+				281F528E06B56521F6529373 /* JustLogIt */,
+				F84407978A17DDBD5A670733 /* JustLogItTests */,
+				CA489D6EB0A1B5C5F4AF26CD /* JustLogItUITests */,
+				DD8D8AC61F73BDE8FF3FCDE3 /* Packages */,
+				976763E8226D50E529B7FD57 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0EDA74F8450A4E32FE31BE2D /* Entries */ = {
+			isa = PBXGroup;
+			children = (
+				B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */,
+			);
+			path = Entries;
+			sourceTree = "<group>";
+		};
+		1305B3EB705396C73E8AF032 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				265E77F400EAC2AEA5A460D0 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		281F528E06B56521F6529373 /* JustLogIt */ = {
+			isa = PBXGroup;
+			children = (
+				6001A05E7A99ECD864DBE280 /* App */,
+				FB6D88B753BD7810333FDB5C /* Features */,
+				C4436EE6BE98330036B91701 /* Persistence */,
+				A3A08FD836B493F06D431E4E /* Resources */,
+				38B5E36AF165562637BE94B1 /* Services */,
+			);
+			path = JustLogIt;
+			sourceTree = "<group>";
+		};
+		38B5E36AF165562637BE94B1 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */,
+				2A01598A5A0C6C4C210068A1 /* FoundationModelsFoodParser.swift */,
+				9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		6001A05E7A99ECD864DBE280 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				0A6FB2A0473C69261D67065C /* JustLogItApp.swift */,
+				EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		976763E8226D50E529B7FD57 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BC30CF9CD057A7706721B8CA /* JustLogIt.app */,
+				5C9CF7389FA92F0FEB31237B /* JustLogItTests.xctest */,
+				38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A3A08FD836B493F06D431E4E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
+			isa = PBXGroup;
+			children = (
+				732C04D059CA7E11ECFD1BA2 /* LogView.swift */,
+				FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */,
+				8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */,
+			);
+			path = Log;
+			sourceTree = "<group>";
+		};
+		C4436EE6BE98330036B91701 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				85A707DD4EE7F9F758DD72E5 /* FoodLogEntryRecord.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		CA489D6EB0A1B5C5F4AF26CD /* JustLogItUITests */ = {
+			isa = PBXGroup;
+			children = (
+				8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */,
+			);
+			path = JustLogItUITests;
+			sourceTree = "<group>";
+		};
+		DD8D8AC61F73BDE8FF3FCDE3 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				7183579E7FC0F8072948C665 /* JustLogItCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		F1E3B70864EE34A8EB6A3B2E /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				8D05C6A2EE7E7258B152170E /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		F84407978A17DDBD5A670733 /* JustLogItTests */ = {
+			isa = PBXGroup;
+			children = (
+				A02B213898318058E4263A83 /* AppConfigurationTests.swift */,
+				A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */,
+			);
+			path = JustLogItTests;
+			sourceTree = "<group>";
+		};
+		FB6D88B753BD7810333FDB5C /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				0EDA74F8450A4E32FE31BE2D /* Entries */,
+				BC7C56AFB5D3A05A62CFEA8E /* Log */,
+				F1E3B70864EE34A8EB6A3B2E /* Settings */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2C3B883FD599713F4862E118 /* JustLogItTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C660D15D2D23608004C797D7 /* Build configuration list for PBXNativeTarget "JustLogItTests" */;
+			buildPhases = (
+				D07B29FC7C4FCE77BDED3582 /* Sources */,
+				036534D9429FF63CE8D896EE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5E2CD70B335F15A1E66DD68C /* PBXTargetDependency */,
+			);
+			name = JustLogItTests;
+			packageProductDependencies = (
+				DD5A1548729A45D85221424B /* JustLogItCore */,
+			);
+			productName = JustLogItTests;
+			productReference = 5C9CF7389FA92F0FEB31237B /* JustLogItTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		851E538201C24CC235DA78B1 /* JustLogIt */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0801B105E06B620AFF75B86D /* Build configuration list for PBXNativeTarget "JustLogIt" */;
+			buildPhases = (
+				26196B3E2EB6C11AD2394E25 /* Sources */,
+				8BA6F4AFD390DFD3D9A1592D /* Resources */,
+				65B85DC144F98BBD0525EB61 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = JustLogIt;
+			packageProductDependencies = (
+				ACBAA3435265F166E23D8CEA /* JustLogItCore */,
+			);
+			productName = JustLogIt;
+			productReference = BC30CF9CD057A7706721B8CA /* JustLogIt.app */;
+			productType = "com.apple.product-type.application";
+		};
+		959AFB4ADAE05C79B4400C9B /* JustLogItUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2004A3C1C1C951DCCA804C0B /* Build configuration list for PBXNativeTarget "JustLogItUITests" */;
+			buildPhases = (
+				51586D55BD3E8F0712471185 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A6FA83D4CFE7726A684CC638 /* PBXTargetDependency */,
+			);
+			name = JustLogItUITests;
+			packageProductDependencies = (
+			);
+			productName = JustLogItUITests;
+			productReference = 38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B26C9FA232544F952D95490E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					2C3B883FD599713F4862E118 = {
+						ProvisioningStyle = Automatic;
+					};
+					851E538201C24CC235DA78B1 = {
+						ProvisioningStyle = Automatic;
+					};
+					959AFB4ADAE05C79B4400C9B = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = 851E538201C24CC235DA78B1;
+					};
+				};
+			};
+			buildConfigurationList = EC5A733F7BF71FB0EA38606B /* Build configuration list for PBXProject "JustLogIt" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 000136AC39E6678C67FC3BE4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				97FCE0323B9FE9738CF42A9D /* XCLocalSwiftPackageReference "Packages/JustLogItCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 976763E8226D50E529B7FD57 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				851E538201C24CC235DA78B1 /* JustLogIt */,
+				2C3B883FD599713F4862E118 /* JustLogItTests */,
+				959AFB4ADAE05C79B4400C9B /* JustLogItUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8BA6F4AFD390DFD3D9A1592D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D655900728AE50A126704D77 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		26196B3E2EB6C11AD2394E25 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6DFDD23A1DBD11E3F4CB683 /* AppConfiguration.swift in Sources */,
+				97D18AA5F6BEDD5D0E08B6B0 /* EntriesView.swift in Sources */,
+				21D874E018370D36C7CE8226 /* FoodLogEntryRecord.swift in Sources */,
+				25DAC5DCBD8DBD40A543520F /* FoundationModelsFoodParser.swift in Sources */,
+				68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */,
+				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
+				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
+				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,
+				3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */,
+				FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */,
+				F99D80FD1D8805ED00A6F2A3 /* USDAFoodDataProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		51586D55BD3E8F0712471185 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				06369E772A94746D8F320B86 /* LoggingFlowUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D07B29FC7C4FCE77BDED3582 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */,
+				5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5E2CD70B335F15A1E66DD68C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 851E538201C24CC235DA78B1 /* JustLogIt */;
+			targetProxy = E94B14026045F308AFAF963B /* PBXContainerItemProxy */;
+		};
+		A6FA83D4CFE7726A684CC638 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 851E538201C24CC235DA78B1 /* JustLogIt */;
+			targetProxy = DD495B9DFDA90F65D79D2083 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		10F4BDF9BC2314F07B877DC0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = JustLogIt;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_ProxyBaseURL = "$(PROXY_BASE_URL)";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_USDADebugAPIKey = "$(USDA_API_KEY)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = JustLogIt;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		585C12F78A77274E6601331A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JustLogIt.app/JustLogIt";
+			};
+			name = Debug;
+		};
+		6F399ABD6AB9DF467524FE7A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = JustLogIt;
+			};
+			name = Release;
+		};
+		7EED2A51894E75BFE0306F95 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = JustLogIt;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_ProxyBaseURL = "$(PROXY_BASE_URL)";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_USDADebugAPIKey = "$(USDA_API_KEY)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_NAME = JustLogIt;
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		82241850160CA79F1C392159 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/JustLogIt.app/JustLogIt";
+			};
+			name = Release;
+		};
+		A3B7C7F71628413F4152E605 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 265E77F400EAC2AEA5A460D0 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		C8AE8CEAD6BA970F403E8D45 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = JustLogIt;
+			};
+			name = Debug;
+		};
+		CD5E7657FBEA9D56546C20E5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 265E77F400EAC2AEA5A460D0 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0801B105E06B620AFF75B86D /* Build configuration list for PBXNativeTarget "JustLogIt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10F4BDF9BC2314F07B877DC0 /* Debug */,
+				7EED2A51894E75BFE0306F95 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		2004A3C1C1C951DCCA804C0B /* Build configuration list for PBXNativeTarget "JustLogItUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8AE8CEAD6BA970F403E8D45 /* Debug */,
+				6F399ABD6AB9DF467524FE7A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C660D15D2D23608004C797D7 /* Build configuration list for PBXNativeTarget "JustLogItTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				585C12F78A77274E6601331A /* Debug */,
+				82241850160CA79F1C392159 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EC5A733F7BF71FB0EA38606B /* Build configuration list for PBXProject "JustLogIt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A3B7C7F71628413F4152E605 /* Debug */,
+				CD5E7657FBEA9D56546C20E5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		97FCE0323B9FE9738CF42A9D /* XCLocalSwiftPackageReference "Packages/JustLogItCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/JustLogItCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		ACBAA3435265F166E23D8CEA /* JustLogItCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JustLogItCore;
+		};
+		DD5A1548729A45D85221424B /* JustLogItCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = JustLogItCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B26C9FA232544F952D95490E /* Project object */;
+}

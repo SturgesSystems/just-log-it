@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars for local development, then supply your own key.
+# Never commit .dev.vars.
+USDA_API_KEY=

@@ -1,0 +1,68 @@
+name: JustLogIt
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "27.0"
+  xcodeVersion: "27.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  JustLogItCore:
+    path: Packages/JustLogItCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    CODE_SIGN_STYLE: Automatic
+targets:
+  JustLogIt:
+    type: application
+    platform: iOS
+    sources:
+      - path: JustLogIt
+    dependencies:
+      - package: JustLogItCore
+    settings:
+      base:
+        PRODUCT_NAME: JustLogIt
+        INFOPLIST_KEY_CFBundleDisplayName: JustLogIt
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.healthcare-fitness
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_ProxyBaseURL: $(PROXY_BASE_URL)
+        INFOPLIST_KEY_USDADebugAPIKey: $(USDA_API_KEY)
+        GENERATE_INFOPLIST_FILE: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: false
+        TARGETED_DEVICE_FAMILY: "1"
+    scheme:
+      testTargets:
+        - JustLogItTests
+        - JustLogItUITests
+      gatherCoverageData: true
+  JustLogItTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: JustLogItTests
+    dependencies:
+      - target: JustLogIt
+      - package: JustLogItCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+  JustLogItUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: JustLogItUITests
+    dependencies:
+      - target: JustLogIt
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true

@@ -1,0 +1,14 @@
+.DS_Store
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
+Backend/node_modules/
+Backend/.dev.vars
+Backend/.env
+Backend/.wrangler/
+Config/Secrets.xcconfig
+*.ipa
+*.dSYM.zip

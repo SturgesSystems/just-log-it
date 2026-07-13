@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "justlogit-usda-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-12",
+  "observability": {
+    "enabled": false,
+    "logs": {
+      "enabled": false,
+      "invocation_logs": false
+    }
+  }
+}
