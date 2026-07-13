@@ -1,0 +1,6 @@
+#include "Base.xcconfig"
+
+// Supply both values from the trusted archive/CI invocation.
+// Release deliberately does not include Secrets.xcconfig or define USDA_API_KEY.
+PROXY_BASE_URL =
+PROXY_ALLOWED_HOST =

@@ -164,7 +164,31 @@ private struct GeneratedFoodDescription {
   var ambiguityNotes: String?
 }
 
+enum FoundationModelsPromptProfile: String, CaseIterable, Sendable {
+  case production
+  case leanCandidate
+
+  var instructions: String {
+    switch self {
+    case .production:
+      """
+      Parse one principal food description for a USDA database lookup. Separate an explicit brand from the product name. Preserve flavor, crust, variety, cut, product line, preparation, and other lookup-critical descriptors. Convert written numbers and common fractions. Preserve two equivalent quantities when supplied. When a person eats a fraction of a container with an explicit full size, keep the fraction and full container size separate: for "half a 12-ounce bottle", fractionOfWhole is 0.5, wholeUnit is bottle, containerSize is 12, and containerSizeUnit is ounce; the consumed amount is 6 ounces, never 0.5 ounce. Never infer a brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or database record. An entire package is not automatically one serving. Mark multiple distinct foods and approximation language. Remove phrases such as 'I ate', meal context, and 'please log' from search terms.
+      """
+    case .leanCandidate:
+      """
+      Extract one principal food for USDA lookup using only facts explicitly present in the current message. Separate brand, food, preparation, descriptors, and quantity. Convert written numbers and fractions. Keep a fraction of a sized container as fraction, whole unit, container size, and container unit. Never invent food, brand, quantity, serving, package, ingredient, nutrition, or prior-message context. Mark multiple foods and approximation wording.
+      """
+    }
+  }
+}
+
 struct FoundationModelsFoodParser: FoodDescriptionParsing {
+  private let promptProfile: FoundationModelsPromptProfile
+
+  init(promptProfile: FoundationModelsPromptProfile = .production) {
+    self.promptProfile = promptProfile
+  }
+
   func parse(_ input: String) async throws -> ParsedFoodRequest {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw FoodParserError.emptyInput }
@@ -231,9 +255,7 @@ struct FoundationModelsFoodParser: FoodDescriptionParsing {
     LanguageModelSession(
       model: model,
       tools: [],
-      instructions: """
-        Parse one principal food description for a USDA database lookup. Separate an explicit brand from the product name. Preserve flavor, crust, variety, cut, product line, preparation, and other lookup-critical descriptors. Convert written numbers and common fractions. Preserve two equivalent quantities when supplied. When a person eats a fraction of a container with an explicit full size, keep the fraction and full container size separate: for "half a 12-ounce bottle", fractionOfWhole is 0.5, wholeUnit is bottle, containerSize is 12, and containerSizeUnit is ounce; the consumed amount is 6 ounces, never 0.5 ounce. Never infer a brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or database record. An entire package is not automatically one serving. Mark multiple distinct foods and approximation language. Remove phrases such as 'I ate', meal context, and 'please log' from search terms.
-        """
+      instructions: promptProfile.instructions
     )
   }
 

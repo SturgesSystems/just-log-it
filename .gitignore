@@ -9,6 +9,13 @@ Backend/node_modules/
 Backend/.dev.vars
 Backend/.env
 Backend/.wrangler/
-Config/Secrets.xcconfig
+Config/Secrets*.xcconfig
+.env
+.env.*
+*.xcarchive
+*.mobileprovision
+*.p12
+*.p8
+*.cer
 *.ipa
 *.dSYM.zip

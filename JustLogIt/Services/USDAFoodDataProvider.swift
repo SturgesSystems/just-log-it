@@ -61,7 +61,9 @@ private struct UnconfiguredFoodDataProvider: FoodDataProviding {
 private actor USDAFoodDataProvider: FoodDataProviding {
   enum Endpoint: Sendable {
     case proxy(URL)
-    case directUSDA(apiKey: String)
+    #if DEBUG
+      case directUSDA(apiKey: String)
+    #endif
   }
 
   private let endpoint: Endpoint
@@ -112,14 +114,18 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     switch endpoint {
     case .proxy(let baseURL):
       url = baseURL.appending(path: "v1/foods/search")
-    case .directUSDA(let apiKey):
-      guard var components = URLComponents(string: "https://api.nal.usda.gov/fdc/v1/foods/search")
-      else {
-        throw FoodDataError.invalidRequest
-      }
-      components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
-      guard let built = components.url else { throw FoodDataError.invalidRequest }
-      url = built
+    #if DEBUG
+      case .directUSDA(let apiKey):
+        guard
+          var components = URLComponents(
+            string: "https://api.nal.usda.gov/fdc/v1/foods/search")
+        else {
+          throw FoodDataError.invalidRequest
+        }
+        components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
+        guard let built = components.url else { throw FoodDataError.invalidRequest }
+        url = built
+    #endif
     }
     var result = URLRequest(url: url)
     result.httpMethod = "POST"
@@ -133,14 +139,18 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     switch endpoint {
     case .proxy(let baseURL):
       url = baseURL.appending(path: "v1/foods/\(fdcID)")
-    case .directUSDA(let apiKey):
-      guard var components = URLComponents(string: "https://api.nal.usda.gov/fdc/v1/food/\(fdcID)")
-      else {
-        throw FoodDataError.invalidRequest
-      }
-      components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
-      guard let built = components.url else { throw FoodDataError.invalidRequest }
-      url = built
+    #if DEBUG
+      case .directUSDA(let apiKey):
+        guard
+          var components = URLComponents(
+            string: "https://api.nal.usda.gov/fdc/v1/food/\(fdcID)")
+        else {
+          throw FoodDataError.invalidRequest
+        }
+        components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
+        guard let built = components.url else { throw FoodDataError.invalidRequest }
+        url = built
+    #endif
     }
     return URLRequest(url: url)
   }

@@ -19,30 +19,48 @@ The app remains usable through manual search and manual nutrition entry when Fou
 
 ```sh
 xcodegen generate
-open JustLogIt.xcodeproj
+open -a Xcode-beta JustLogIt.xcodeproj
 ```
 
 The checked-in `.xcodeproj` is generated from `project.yml`. Regenerate it after adding targets or changing build settings.
 
 ## Configuration
 
-Copy `Config/Secrets.xcconfig.example` to `Config/Secrets.xcconfig`. The real file is ignored by Git.
+Debug and Release use separate xcconfigs. Copy `Config/Secrets.xcconfig.example` to `Config/Secrets.xcconfig` for local Debug development only. The real file is ignored by Git and is never imported by Release.
 
-For the normal configuration, set:
+In an xcconfig, URLs must escape `//` because it begins a comment. A Debug proxy therefore uses:
 
 ```text
-PROXY_BASE_URL = https://api.example.com
+PROXY_BASE_URL = https:/$()/api.example.com
+PROXY_ALLOWED_HOST = api.example.com
 ```
 
-For debug-only direct USDA development, you may instead set:
+For Debug-only direct USDA development, you may instead set:
 
 ```text
 USDA_API_KEY = your-development-key
 ```
 
-No release configuration embeds a USDA key. If neither value is present, the app launches normally and manual nutrition entry remains available.
+If neither Debug value is present, the app launches normally and manual nutrition entry remains available.
 
-The Debug build reads `USDA_API_KEY` through the checked-in Info.plist template. The real value remains in ignored `Config/Secrets.xcconfig` and is not committed.
+The Debug build reads `USDA_API_KEY` through its Debug-only Info.plist. The real value remains in ignored `Config/Secrets.xcconfig` and is not committed.
+
+Release accepts only a root HTTPS proxy URL plus an exact host pin. Supply both from a trusted archive or CI environment; Release does not import the local secrets file, define a USDA key setting, include the debug-key plist field, or compile the direct-USDA endpoint.
+
+```sh
+export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+xcodebuild \
+  -project JustLogIt.xcodeproj \
+  -scheme JustLogIt \
+  -configuration Release \
+  -destination 'generic/platform=iOS Simulator' \
+  PROXY_BASE_URL="$JUSTLOGIT_RELEASE_PROXY_URL" \
+  PROXY_ALLOWED_HOST="$JUSTLOGIT_RELEASE_PROXY_HOST" \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+The Release pre-build guard rejects missing, non-HTTPS, unpinned, non-root, placeholder, user-info, port, query, fragment, direct-key, and placeholder-bundle configurations without printing their values. The post-build verifier checks the processed app plist and binary for debug USDA credential markers.
 
 ## Apple Health
 
@@ -57,13 +75,16 @@ JustLogIt writes every USDA nutrient that has a semantically equivalent HealthKi
 The deterministic domain package can be tested without Xcode:
 
 ```sh
-swift test --package-path Packages/JustLogItCore
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+  xcrun swift test --package-path Packages/JustLogItCore
 ```
 
 With Xcode 27 installed:
 
 ```sh
-xcodebuild test -project JustLogIt.xcodeproj -scheme JustLogIt -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
+  xcodebuild test -project JustLogIt.xcodeproj -scheme JustLogIt \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
 ## Privacy model

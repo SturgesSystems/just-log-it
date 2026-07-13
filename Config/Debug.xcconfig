@@ -1,0 +1,6 @@
+#include "Base.xcconfig"
+
+PROXY_BASE_URL =
+PROXY_ALLOWED_HOST =
+USDA_API_KEY =
+#include? "Secrets.xcconfig"

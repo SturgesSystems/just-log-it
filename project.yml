@@ -9,8 +9,8 @@ configs:
   Debug: debug
   Release: release
 configFiles:
-  Debug: Config/Base.xcconfig
-  Release: Config/Base.xcconfig
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
 packages:
   JustLogItCore:
     path: Packages/JustLogItCore
@@ -28,6 +28,7 @@ targets:
       - path: JustLogIt
         excludes:
           - Resources/Info.plist
+          - Resources/Info-Debug.plist
           - Resources/JustLogIt.entitlements
     dependencies:
       - package: JustLogItCore
@@ -36,11 +37,28 @@ targets:
       base:
         PRODUCT_NAME: JustLogIt
         GENERATE_INFOPLIST_FILE: false
-        INFOPLIST_FILE: JustLogIt/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: JustLogIt/Resources/JustLogIt.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SUPPORTS_MACCATALYST: false
         TARGETED_DEVICE_FAMILY: "1"
+      configs:
+        Debug:
+          INFOPLIST_FILE: JustLogIt/Resources/Info-Debug.plist
+        Release:
+          INFOPLIST_FILE: JustLogIt/Resources/Info.plist
+    preBuildScripts:
+      - name: Validate Release Configuration
+        script: '"$SRCROOT/Scripts/validate-release-configuration.sh"'
+        inputFiles:
+          - $(SRCROOT)/Scripts/validate-release-configuration.sh
+        basedOnDependencyAnalysis: false
+    postBuildScripts:
+      - name: Verify Release Product
+        script: '"$SRCROOT/Scripts/verify-release-product.sh"'
+        inputFiles:
+          - $(SRCROOT)/Scripts/verify-release-product.sh
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)
+        basedOnDependencyAnalysis: false
     scheme:
       testTargets:
         - JustLogItTests

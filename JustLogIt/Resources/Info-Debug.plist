@@ -28,6 +28,8 @@
 	<string>$(PROXY_BASE_URL)</string>
 	<key>ProxyAllowedHost</key>
 	<string>$(PROXY_ALLOWED_HOST)</string>
+	<key>USDADebugAPIKey</key>
+	<string>$(USDA_API_KEY)</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
