@@ -1,3 +1,4 @@
+import JustLogItCore
 import SwiftUI
 
 @MainActor
@@ -73,6 +74,7 @@ struct SettingsView: View {
   @State private var confirmsRememberedClear = false
   @State private var cacheResultMessage: String?
   @State private var rememberedResultMessage: String?
+  @State private var rememberedSelections: [RememberedFoodSelection] = []
   @State private var healthSettings = HealthSyncSettingsModel()
   private let rememberedFoods = UserDefaultsRememberedFoodStore()
 
@@ -110,6 +112,36 @@ struct SettingsView: View {
         )
         .font(.caption)
         .foregroundStyle(.secondary)
+      }
+
+      if !rememberedSelections.isEmpty {
+        Section {
+          ForEach(rememberedSelections) { selection in
+            VStack(alignment: .leading, spacing: 4) {
+              Text(selection.displayName)
+                .font(.body.weight(.medium))
+              if let brand = selection.brand, !brand.isEmpty {
+                Text(brand)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+              Text("Lookup “\(selection.signature)” · FDC \(selection.fdcID)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(rememberedAccessibilityLabel(selection))
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+              Button("Forget", role: .destructive) {
+                forgetRemembered(selection)
+              }
+            }
+          }
+        } header: {
+          Text("Remembered matches")
+        } footer: {
+          Text("Swipe to forget a match. This does not delete log entries.")
+        }
       }
 
       Section {
@@ -178,6 +210,7 @@ struct SettingsView: View {
     } message: {
       Text(rememberedResultMessage ?? "")
     }
+    .onAppear(perform: reloadRememberedSelections)
   }
 
   private var providerDisplayDescription: String {
@@ -224,7 +257,29 @@ struct SettingsView: View {
 
   private func clearRememberedFoods() {
     rememberedFoods.clear()
+    rememberedSelections = []
     rememberedResultMessage = "Remembered food matches were cleared."
+  }
+
+  private func reloadRememberedSelections() {
+    rememberedSelections = rememberedFoods.load().rankedForDisplay()
+  }
+
+  private func forgetRemembered(_ selection: RememberedFoodSelection) {
+    var catalog = rememberedFoods.load()
+    catalog.remove(signature: selection.signature, fdcID: selection.fdcID)
+    rememberedFoods.save(catalog)
+    reloadRememberedSelections()
+  }
+
+  private func rememberedAccessibilityLabel(_ selection: RememberedFoodSelection) -> String {
+    var parts = [selection.displayName]
+    if let brand = selection.brand, !brand.isEmpty {
+      parts.append(brand)
+    }
+    parts.append("lookup \(selection.signature)")
+    parts.append("FDC \(selection.fdcID)")
+    return parts.joined(separator: ", ")
   }
 
   private func clearCache() {

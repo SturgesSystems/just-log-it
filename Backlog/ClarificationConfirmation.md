@@ -79,7 +79,7 @@ The model may propose. Deterministic code validates and routes. The user resolve
 - [x] Log UI card for active `ClarificationQuestion` with Continue, Manual, and Edit Description paths
 - [x] App unit tests: multi-food presents Q&A without search; answering proceeds to USDA; empty answer ignored
 - [ ] Instrument clarification count, abandonment, and correction locally in test builds only; add no analytics
-- [ ] Replace post-USDA quantity `clarifying` stage with the same generic question contract (still uses servings/grams fields)
+- [x] Post-USDA quantity `clarifying` stage uses `ClarificationQuestion` (`missingQuantity`) with suggestions + servings/grams fields
 
 ### Phase 3 — Composite and photo adapters
 

@@ -359,6 +359,30 @@ struct LogView: View {
           .accessibilityIdentifier("status-message")
       }
 
+      if let suggestions = model.activeQuestion?.suggestedAnswers, !suggestions.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          ForEach(suggestions, id: \.self) { suggestion in
+            Button {
+              focusedField = nil
+              model.chooseClarificationSuggestion(suggestion)
+            } label: {
+              Text(suggestion)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .background(.background, in: .rect(cornerRadius: 12))
+            .overlay {
+              RoundedRectangle(cornerRadius: 12)
+                .stroke(.separator, lineWidth: 0.5)
+            }
+            .accessibilityIdentifier("quantity-suggestion")
+          }
+        }
+      }
+
       Picker("Quantity unit", selection: $quantityMode) {
         ForEach(QuantityMode.allCases) { mode in
           Text(mode.rawValue).tag(mode)

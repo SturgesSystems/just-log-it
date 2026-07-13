@@ -377,3 +377,16 @@ import Testing
   #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("eggs"))
   #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("bacon"))
 }
+
+@Test func quantityQuestionFactoryIncludesServingAndGramSuggestions() {
+  let question = ClarificationQuestion.quantity(
+    explanation: "Enter the amount you ate.",
+    householdServing: "1 cup",
+    servingSizeGrams: 50
+  )
+  #expect(question.code == .missingQuantity)
+  #expect(question.prompt == "Enter the amount you ate.")
+  #expect(question.suggestedAnswers.contains("1 serving"))
+  #expect(question.suggestedAnswers.contains("50 g"))
+  #expect(question.suggestedAnswers.contains("100 g"))
+}

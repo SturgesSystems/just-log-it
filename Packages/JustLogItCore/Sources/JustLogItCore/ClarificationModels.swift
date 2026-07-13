@@ -102,6 +102,37 @@ public struct ClarificationQuestion: Sendable, Equatable, Codable {
     self.suggestedAnswers = suggestedAnswers
     self.allowsFreeform = allowsFreeform
   }
+
+  /// Post-USDA quantity question. UI may still use dedicated servings/grams fields;
+  /// suggestions are optional shortcuts that resolve to those fields.
+  public static func quantity(
+    explanation: String,
+    householdServing: String? = nil,
+    servingSizeGrams: Double? = nil,
+    code: AmbiguityCode = .missingQuantity
+  ) -> ClarificationQuestion {
+    var suggestions: [String] = []
+    if householdServing != nil || servingSizeGrams != nil {
+      suggestions.append("1 serving")
+    }
+    if let grams = servingSizeGrams, grams.isFinite, grams > 0 {
+      let rounded = grams.rounded()
+      if abs(rounded - grams) < 0.05 {
+        suggestions.append("\(Int(rounded)) g")
+      } else {
+        suggestions.append(String(format: "%.1f g", grams))
+      }
+    }
+    if !suggestions.contains("100 g") {
+      suggestions.append("100 g")
+    }
+    return ClarificationQuestion(
+      code: code,
+      prompt: explanation,
+      suggestedAnswers: suggestions,
+      allowsFreeform: true
+    )
+  }
 }
 
 /// Policy outcome for a draft before USDA lookup or nutrition work.

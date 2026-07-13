@@ -18,6 +18,7 @@
 		3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */; };
 		5F047A441797A166E8DA68B9 /* FoodLogEntryRecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BD9087C6FD1E40508C56B7 /* FoodLogEntryRecordTests.swift */; };
 		5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */; };
+		63CE1390C8F131BB4922202E /* QuantityClarificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F243DAD4CF85F4337D29912 /* QuantityClarificationTests.swift */; };
 		68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6FB2A0473C69261D67065C /* JustLogItApp.swift */; };
 		7D396A00AD9CB18938B2FB65 /* HealthKitNutritionWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC56D7723ED1D3109BAAA332 /* HealthKitNutritionWriterTests.swift */; };
 		8E8D609947A73371AB2317DB /* HealthSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */; };
@@ -78,6 +79,7 @@
 		8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingFlowUITests.swift; sourceTree = "<group>"; };
 		8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntryView.swift; sourceTree = "<group>"; };
 		8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RememberedFoodStoreTests.swift; sourceTree = "<group>"; };
+		8F243DAD4CF85F4337D29912 /* QuantityClarificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuantityClarificationTests.swift; sourceTree = "<group>"; };
 		9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USDAFoodDataProvider.swift; sourceTree = "<group>"; };
 		9CE54B5F8B5B1F1C460FBA91 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		A02B213898318058E4263A83 /* AppConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationTests.swift; sourceTree = "<group>"; };
@@ -262,6 +264,7 @@
 				246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */,
 				F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */,
 				C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */,
+				8F243DAD4CF85F4337D29912 /* QuantityClarificationTests.swift */,
 				8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */,
 			);
 			path = JustLogItTests;
@@ -486,6 +489,7 @@
 				1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */,
 				EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */,
 				A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */,
+				63CE1390C8F131BB4922202E /* QuantityClarificationTests.swift in Sources */,
 				ED3B539849DA1696772A4AEA /* RememberedFoodStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

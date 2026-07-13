@@ -30,6 +30,17 @@ final class RememberedFoodStoreTests: XCTestCase {
     XCTAssertTrue(store.load().selections.isEmpty)
   }
 
+  func testCatalogForgetAndRankedDisplay() {
+    var catalog = RememberedFoodCatalog()
+    catalog.remember(
+      query: "cookie", fdcID: 1, displayName: "Cookie A", at: .now.addingTimeInterval(-10))
+    catalog.remember(query: "milk", fdcID: 2, displayName: "Milk B", at: .now)
+    XCTAssertEqual(catalog.rankedForDisplay().map(\.fdcID), [2, 1])
+    catalog.remove(signature: "cookie", fdcID: 1)
+    XCTAssertEqual(catalog.preferredFdcIDs(forQuery: "cookie"), [])
+    XCTAssertEqual(catalog.preferredFdcIDs(forQuery: "milk"), [2])
+  }
+
   func testMarkSavedRemembersSelectionAndBoostsLaterSearch() async {
     let suite = "justlogit.tests.remembered.vm.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!

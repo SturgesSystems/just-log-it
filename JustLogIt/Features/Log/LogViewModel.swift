@@ -133,6 +133,10 @@ final class LogViewModel: ObservableObject {
   }
 
   func chooseClarificationSuggestion(_ suggestion: String) {
+    if stage == .clarifying {
+      applyQuantitySuggestion(suggestion)
+      return
+    }
     clarificationAnswer = suggestion
     submitClarificationAnswer()
   }
@@ -157,6 +161,42 @@ final class LogViewModel: ObservableObject {
       return
     }
     apply(resolver.manualGrams(grams, food: details))
+  }
+
+  /// Applies a quantity suggestion or freeform text such as "1 serving" / "100 g".
+  func applyQuantitySuggestion(_ suggestion: String) {
+    let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    let lower = trimmed.lowercased()
+    if lower.contains("serving") {
+      let numeric = lower.replacingOccurrences(of: "servings", with: "")
+        .replacingOccurrences(of: "serving", with: "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      clarificationServings = numeric.isEmpty ? "1" : numeric
+      resolveWithServings()
+      return
+    }
+    if lower.hasSuffix(" g") || lower.hasSuffix("g") || lower.contains("gram") {
+      let numeric =
+        lower
+        .replacingOccurrences(of: "grams", with: "")
+        .replacingOccurrences(of: "gram", with: "")
+        .replacingOccurrences(of: "g", with: "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      clarificationGrams = numeric
+      resolveWithGrams()
+      return
+    }
+    // Locale-aware bare number defaults to servings when a USDA serving exists.
+    if numberParser.parse(trimmed, minimum: .greaterThanZero) != nil {
+      if details?.servingSize != nil || details?.householdServing != nil {
+        clarificationServings = trimmed
+        resolveWithServings()
+      } else {
+        clarificationGrams = trimmed
+        resolveWithGrams()
+      }
+    }
   }
 
   func makeRecord() throws -> FoodLogEntryRecord {
@@ -419,8 +459,10 @@ final class LogViewModel: ObservableObject {
       guard isCurrentOperation(generation) else { return }
       self.details = details
       guard let parsed else {
-        stage = .clarifying
-        message = "Enter the amount you ate."
+        presentQuantityClarification(
+          explanation: "Enter the amount you ate.",
+          food: details
+        )
         return
       }
       apply(resolver.resolve(parsed, against: details))
@@ -446,27 +488,61 @@ final class LogViewModel: ObservableObject {
   private func apply(_ outcome: ServingResolutionOutcome) {
     switch outcome {
     case .needsClarification(let explanation):
-      stage = .clarifying
-      message = explanation
+      if let details {
+        presentQuantityClarification(explanation: explanation, food: details)
+      } else {
+        stage = .clarifying
+        message = explanation
+        activeQuestion = ClarificationQuestion.quantity(explanation: explanation)
+      }
     case .resolved(let resolution):
       guard let details else { return }
       do {
         nutrients = try calculator.calculate(food: details, resolution: resolution)
         guard nutrients.contains(where: { $0.key == .energy }) else {
-          stage = .clarifying
-          message =
-            "This USDA record does not provide enough compatible nutrition data. Choose another result or enter nutrition manually."
+          presentQuantityClarification(
+            explanation:
+              "This USDA record does not provide enough compatible nutrition data. Choose another result or enter nutrition manually.",
+            food: details,
+            code: .missingQuantity
+          )
           return
         }
+        activeQuestion = nil
         self.resolution = resolution
         message = nil
         stage = .reviewing
       } catch {
-        stage = .clarifying
-        message =
-          "The serving and nutrition bases could not be combined safely. Enter servings or grams."
+        presentQuantityClarification(
+          explanation:
+            "The serving and nutrition bases could not be combined safely. Enter servings or grams.",
+          food: details
+        )
       }
     }
+  }
+
+  private func presentQuantityClarification(
+    explanation: String,
+    food: FoodDetails,
+    code: AmbiguityCode = .missingQuantity
+  ) {
+    let grams: Double? = {
+      guard let size = food.servingSize, size.isFinite, size > 0 else { return nil }
+      let unit = food.servingSizeUnit?.lowercased() ?? ""
+      if unit == "g" || unit == "gram" || unit == "grams" { return size }
+      return nil
+    }()
+    let question = ClarificationQuestion.quantity(
+      explanation: explanation,
+      householdServing: food.householdServing,
+      servingSizeGrams: grams,
+      code: code
+    )
+    activeQuestion = question
+    message = question.prompt
+    failureKind = nil
+    stage = .clarifying
   }
 
   /// Records a confirmed USDA pick for future ranking boosts only — never auto-selects.
