@@ -57,7 +57,8 @@ targets:
         script: '"$SRCROOT/Scripts/verify-release-product.sh"'
         inputFiles:
           - $(SRCROOT)/Scripts/verify-release-product.sh
-          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Info.plist
+          - $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/$(EXECUTABLE_NAME)
         basedOnDependencyAnalysis: false
     scheme:
       testTargets:

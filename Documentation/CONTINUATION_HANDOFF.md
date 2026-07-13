@@ -1,10 +1,10 @@
 # JustLogIt continuation handoff
 
-Last updated: 2026-07-12, America/New_York  
+Last updated: 2026-07-12, America/New_York (successor update)  
 Prepared because the primary Codex task was approaching its weekly usage limit.  
 Audience: a new implementation agent with no reliable access to the preceding conversation.
 
-This is the authoritative continuation map, not proof that the product is finished. Read this entire document before editing. Then inspect the current worktree because several launch-hardening changes are intentionally uncommitted and have not completed compilation.
+**Successor status (Grok session):** The previously dirty Release + parser-eval tranches were already committed as `0128af4`. This session formatted the harness, fixed Release post-build sandbox inputs, verified Debug/Release builds and focused tests, documented parser evaluation, and implemented Worker transport/quota hardening. Repo path is `/Users/james/Developer/just-log-it` (not `Documents/JustLogIt`).
 
 ## 1. Immediate orientation
 

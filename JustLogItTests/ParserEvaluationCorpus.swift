@@ -34,7 +34,8 @@ enum ParserEvaluationCorpus {
       id: "brand.fairlife.container", category: .brand,
       input: "About half a 12-ounce bottle of Fairlife chocolate milk",
       productTokens: ["chocolate", "milk"], brand: .exact("Fairlife"),
-      amount: .fraction(0.5, wholeUnits: ["bottle"], containerSize: 12, containerUnits: ["ounce", "oz"]),
+      amount: .fraction(
+        0.5, wholeUnits: ["bottle"], containerSize: 12, containerUnits: ["ounce", "oz"]),
       disposition: .accept),
     .init(
       id: "brand.restaurant", category: .brand,

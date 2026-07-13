@@ -165,7 +165,8 @@ private enum ParserEvaluationScorer {
     let behaviorCorrect: Bool?
   }
 
-  static func score(_ parsed: ParsedFoodRequest, for evaluationCase: ParserEvaluationCase) -> Scores {
+  static func score(_ parsed: ParsedFoodRequest, for evaluationCase: ParserEvaluationCase) -> Scores
+  {
     let regrounded = ParsedFoodRequestGrounder().ground(parsed, in: evaluationCase.input)
     let sourceGrounded = regrounded == parsed && !parsed.productName.isEmpty
     return Scores(
@@ -190,9 +191,11 @@ private enum ParserEvaluationScorer {
   ) -> Bool? {
     guard evaluationCase.disposition != .humanReview else { return nil }
     let productTokens = normalizedTokens(parsed.productName)
-    guard evaluationCase.productTokens.allSatisfy({ expected in
-      productTokens.contains(where: { tokenMatches($0, expected.lowercased()) })
-    }) else { return false }
+    guard
+      evaluationCase.productTokens.allSatisfy({ expected in
+        productTokens.contains(where: { tokenMatches($0, expected.lowercased()) })
+      })
+    else { return false }
 
     switch evaluationCase.brand {
     case .ignore:
@@ -372,8 +375,8 @@ private struct ParserEvaluationReport: Codable {
   }
 }
 
-private extension Duration {
-  var milliseconds: Double {
+extension Duration {
+  fileprivate var milliseconds: Double {
     let components = self.components
     return Double(components.seconds) * 1_000
       + Double(components.attoseconds) / 1_000_000_000_000_000

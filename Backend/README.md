@@ -2,7 +2,20 @@
 
 This Cloudflare Worker exposes the two FoodData Central operations used by JustLogIt while keeping the USDA API key out of the iOS application.
 
-It is deliberately stateless: there is no database, cache, analytics integration, user identifier, or custom logging. Search request bodies are used only to service the current request. Worker observability and invocation logs are disabled in `wrangler.jsonc`.
+The Worker is intentionally narrow:
+
+- No application database, cache, analytics SDK, or user identifier storage
+- Search request bodies are used only to service the current request
+- Worker observability and invocation logs are disabled in `wrangler.jsonc`
+- USDA authentication is sent only as an `X-Api-Key` request header, never as a URL query parameter
+- Upstream fetch uses `redirect: "error"` so a redirect cannot carry the credential
+- Successful upstream responses must be `application/json` and are capped at 2 MiB
+- The request/response timeout covers body consumption, not only headers
+- A singleton Durable Object under the constant name `global` enforces a shared budget of 900 USDA requests per hour
+
+The Durable Object stores only `{ epochHour, count }`. It does not store food queries, IP addresses, or user identifiers. If the quota binding is missing or unavailable, the Worker fails closed.
+
+This repository state is not a deployed production system. Deployment, Cloudflare log/transform audit, route verification, and rollback drills remain launch gates.
 
 ## Routes
 
@@ -36,7 +49,7 @@ Errors have a stable shape:
 }
 ```
 
-Only `Retry-After` and standard `X-RateLimit-*` headers are copied from USDA. Upstream error bodies and unrelated headers are not returned.
+Only `Retry-After` and standard `X-RateLimit-*` headers are copied from USDA. Upstream error bodies, credentials, URLs, and unrelated headers are not returned.
 
 ## Local development
 
@@ -74,4 +87,11 @@ Do not put the key in `wrangler.jsonc`, source control, an Xcode configuration, 
 
 After deployment, confirm in the Cloudflare dashboard that Workers Logs, Logpush, and any account-level request logging are disabled for this Worker. Do not add `console.log` calls containing URLs, request headers, bodies, or USDA responses. Cloudflare still transiently processes network metadata required to deliver requests; the product privacy policy should describe Cloudflare and USDA as service providers.
 
-The Worker constructs each USDA subrequest from scratch with only `Accept` and, for searches, `Content-Type` headers. It never forwards incoming client headers or identifiers. If the Worker is attached to a custom zone, also review that zone's Cloudflare Managed Transforms and privacy configuration before production release.
+Also verify:
+
+1. The Durable Object binding and migration applied.
+2. Over-budget requests return the stable `rate_limited` error without calling USDA.
+3. Rollback and secret rotation still work.
+4. Zone Managed Transforms do not inject visitor identifiers into upstream requests.
+
+The USDA public limit is 1,000 requests/hour per IP. Because Worker egress can share an IP, the global Durable Object budget is set to 900/hour to leave operational headroom. A per-colocation Rate Limit binding alone is not a global quota guarantee.

@@ -9,5 +9,19 @@
       "enabled": false,
       "invocation_logs": false
     }
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GLOBAL_USDA_QUOTA",
+        "class_name": "GlobalUSDAQuota"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-global-usda-quota",
+      "new_sqlite_classes": ["GlobalUSDAQuota"]
+    }
+  ]
 }

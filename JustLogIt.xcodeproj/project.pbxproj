@@ -22,6 +22,7 @@
 		8E8D609947A73371AB2317DB /* HealthSyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */; };
 		916AB18574E9D1BA032575CF /* LocalizedNumberParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DCB8D2984BD6226043E498F /* LocalizedNumberParser.swift */; };
 		97D18AA5F6BEDD5D0E08B6B0 /* EntriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */; };
+		A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */; };
 		C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */; };
 		D655900728AE50A126704D77 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A4E579ABCB3A42DC8A338D22 /* Assets.xcassets */; };
 		DE729E4DC6B4089659990870 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732C04D059CA7E11ECFD1BA2 /* LogView.swift */; };
@@ -77,6 +78,7 @@
 		A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedNumberParserTests.swift; sourceTree = "<group>"; };
 		B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntriesView.swift; sourceTree = "<group>"; };
 		BC30CF9CD057A7706721B8CA /* JustLogIt.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = JustLogIt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserEvaluationHarnessTests.swift; sourceTree = "<group>"; };
 		CC56D7723ED1D3109BAAA332 /* HealthKitNutritionWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitNutritionWriterTests.swift; sourceTree = "<group>"; };
 		DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		EEC496D7DDDD7FACD264AB40 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				A60184B1DDDE1E3189A78281 /* LocalizedNumberParserTests.swift */,
 				246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */,
 				F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */,
+				C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */,
 			);
 			path = JustLogItTests;
 			sourceTree = "<group>";
@@ -413,7 +416,8 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/Scripts/verify-release-product.sh",
-				"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)",
+				"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/Info.plist",
+				"$(TARGET_BUILD_DIR)/$(WRAPPER_NAME)/$(EXECUTABLE_NAME)",
 			);
 			name = "Verify Release Product";
 			outputFileListPaths = (
@@ -466,6 +470,7 @@
 				F9A697CF039AC437D93FEB79 /* LocalizedNumberParserTests.swift in Sources */,
 				1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */,
 				EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */,
+				A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
