@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		03552A486D17E12563D3C98A /* RememberedFoodStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479976FA1AD288FB67EEAC7D /* RememberedFoodStore.swift */; };
 		06369E772A94746D8F320B86 /* LoggingFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */; };
 		12762173FD9DA7E5DEE62B5E /* JustLogItCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACBAA3435265F166E23D8CEA /* JustLogItCore */; };
 		1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */; };
@@ -28,6 +29,7 @@
 		DE729E4DC6B4089659990870 /* LogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732C04D059CA7E11ECFD1BA2 /* LogView.swift */; };
 		DF8AAFF5BD6E750DFA4B64AF /* JustLogItCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD5A1548729A45D85221424B /* JustLogItCore */; };
 		E8704AACDAD8B09D1546FB0F /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9CE54B5F8B5B1F1C460FBA91 /* HealthKit.framework */; };
+		ED3B539849DA1696772A4AEA /* RememberedFoodStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */; };
 		EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */; };
 		F6DFDD23A1DBD11E3F4CB683 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC3304167E45CBF5FF45BFD /* AppConfiguration.swift */; };
 		F8DC93778FBD8B14AF0D4E68 /* LogViewModelClarificationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */; };
@@ -63,6 +65,7 @@
 		2C4F6A06C6B095E217539337 /* LogViewModelClarificationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModelClarificationPolicyTests.swift; sourceTree = "<group>"; };
 		38DE4F03C7F859CB0CB9F453 /* JustLogItUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncCoordinator.swift; sourceTree = "<group>"; };
+		479976FA1AD288FB67EEAC7D /* RememberedFoodStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RememberedFoodStore.swift; sourceTree = "<group>"; };
 		484D15BCA66E9AEC885A596B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		5C9CF7389FA92F0FEB31237B /* JustLogItTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = JustLogItTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5DCB8D2984BD6226043E498F /* LocalizedNumberParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizedNumberParser.swift; sourceTree = "<group>"; };
@@ -74,6 +77,7 @@
 		8D05C6A2EE7E7258B152170E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		8DC5AC79DBFF186467C592DF /* LoggingFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggingFlowUITests.swift; sourceTree = "<group>"; };
 		8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualEntryView.swift; sourceTree = "<group>"; };
+		8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RememberedFoodStoreTests.swift; sourceTree = "<group>"; };
 		9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USDAFoodDataProvider.swift; sourceTree = "<group>"; };
 		9CE54B5F8B5B1F1C460FBA91 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		A02B213898318058E4263A83 /* AppConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigurationTests.swift; sourceTree = "<group>"; };
@@ -170,6 +174,7 @@
 				70B5F9D08891552225DCE55A /* HealthKitNutritionWriter.swift */,
 				3A4A54DCF43E0D6262A4D045 /* HealthSyncCoordinator.swift */,
 				5DCB8D2984BD6226043E498F /* LocalizedNumberParser.swift */,
+				479976FA1AD288FB67EEAC7D /* RememberedFoodStore.swift */,
 				9011B1E8B821D78AC1D97935 /* USDAFoodDataProvider.swift */,
 			);
 			path = Services;
@@ -257,6 +262,7 @@
 				246ED50D87C4BCD554E0E3E6 /* LogViewModelConcurrencyTests.swift */,
 				F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */,
 				C8B6EABEF931822B7D184C88 /* ParserEvaluationHarnessTests.swift */,
+				8ECEF5A0591F60AEF117D3A8 /* RememberedFoodStoreTests.swift */,
 			);
 			path = JustLogItTests;
 			sourceTree = "<group>";
@@ -452,6 +458,7 @@
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,
+				03552A486D17E12563D3C98A /* RememberedFoodStore.swift in Sources */,
 				3F02CD5A6BE7F52164473BFD /* RootTabView.swift in Sources */,
 				FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */,
 				F99D80FD1D8805ED00A6F2A3 /* USDAFoodDataProvider.swift in Sources */,
@@ -479,6 +486,7 @@
 				1FA0F1ED99E865C6832B19F0 /* LogViewModelConcurrencyTests.swift in Sources */,
 				EF195F0E25724AC6819A3924 /* ParserEvaluationCorpus.swift in Sources */,
 				A172B250B585600CD2DF1BC5 /* ParserEvaluationHarnessTests.swift in Sources */,
+				ED3B539849DA1696772A4AEA /* RememberedFoodStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

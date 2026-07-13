@@ -7,11 +7,18 @@ public struct FoodSearchResultRanker: Sendable {
 
   public func rank(
     _ results: [FoodSearchResult],
-    for parsed: ParsedFoodRequest
+    for parsed: ParsedFoodRequest,
+    preferredFdcIDs: Set<Int> = []
   ) -> [FoodSearchResult] {
     let intent = Intent(parsed)
     return results.enumerated()
-      .map { (index: $0.offset, result: $0.element, score: score($0.element, intent: intent)) }
+      .map {
+        (
+          index: $0.offset,
+          result: $0.element,
+          score: score($0.element, intent: intent, preferredFdcIDs: preferredFdcIDs)
+        )
+      }
       .sorted {
         if $0.score != $1.score { return $0.score > $1.score }
         return $0.index < $1.index
@@ -19,9 +26,18 @@ public struct FoodSearchResultRanker: Sendable {
       .map(\.result)
   }
 
-  private func score(_ result: FoodSearchResult, intent: Intent) -> Int {
+  /// Bounded boost for previously confirmed FDC IDs. Never removes results or auto-selects.
+  public static let rememberedSelectionBoost = 50
+
+  private func score(
+    _ result: FoodSearchResult,
+    intent: Intent,
+    preferredFdcIDs: Set<Int>
+  ) -> Int {
     let descriptionTokens = Self.tokens(result.description)
-    guard !intent.productTokens.isEmpty else { return 0 }
+    guard !intent.productTokens.isEmpty else {
+      return preferredFdcIDs.contains(result.fdcID) ? Self.rememberedSelectionBoost : 0
+    }
 
     let matchedProductCount = intent.productTokens.filter { queryToken in
       descriptionTokens.contains { Self.matches(queryToken, $0) }
@@ -72,6 +88,10 @@ public struct FoodSearchResultRanker: Sendable {
           && !intent.qualifierTokens.contains(where: { Self.matches($0, token) })
       }
       score -= min(relevantLeadingTokens.count * 12, 72)
+    }
+
+    if preferredFdcIDs.contains(result.fdcID) {
+      score += Self.rememberedSelectionBoost
     }
 
     return score

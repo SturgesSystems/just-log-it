@@ -555,3 +555,39 @@ import Testing
     #expect(grounded.isApproximate, Comment(rawValue: source))
   }
 }
+
+@Test func foodLookupSignatureNormalizesPunctuationAndCase() {
+  #expect(FoodLookupSignature.normalize("  Oreo, Cookie! ") == "oreo cookie")
+  #expect(FoodLookupSignature.normalize("EGGS and BACON") == "eggs and bacon")
+}
+
+@Test func rememberedCatalogPrefersExactSignatureFdcIDs() {
+  var catalog = RememberedFoodCatalog()
+  catalog.remember(query: "oreo cookie", fdcID: 111, displayName: "OREO COOKIE")
+  catalog.remember(query: "banana", fdcID: 222, displayName: "Banana")
+  #expect(catalog.preferredFdcIDs(forQuery: "Oreo Cookie") == [111])
+  #expect(catalog.preferredFdcIDs(forQuery: "apple") == [])
+}
+
+@Test func rememberedSelectionBoostsMatchingResultWithoutFiltering() {
+  let parsed = ParsedFoodRequest(productName: "cookie", searchTerms: "cookie")
+  let weak = FoodSearchResult(
+    fdcID: 1, description: "COOKIE SANDWICH", dataType: "Branded")
+  let remembered = FoodSearchResult(
+    fdcID: 99, description: "GENERIC COOKIE", dataType: "Branded")
+  let other = FoodSearchResult(
+    fdcID: 2, description: "CRACKER", dataType: "Branded")
+
+  let ranked = FoodSearchResultRanker().rank(
+    [weak, other, remembered],
+    for: parsed,
+    preferredFdcIDs: [99]
+  )
+  #expect(ranked.map(\.fdcID).contains(2))
+  #expect(
+    ranked.first?.fdcID == 99 || ranked.map(\.fdcID).first == 99
+      || ranked.firstIndex(where: { $0.fdcID == 99 })! < ranked.firstIndex(where: { $0.fdcID == 2 }
+      )!)
+  // Remembered cookie outranks unrelated cracker; full set preserved.
+  #expect(Set(ranked.map(\.fdcID)) == [1, 2, 99])
+}

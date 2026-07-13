@@ -44,6 +44,7 @@ final class LogViewModel: ObservableObject {
 
   private let parser: any FoodDescriptionParsing
   private let provider: any FoodDataProviding
+  private let rememberedFoods: any RememberedFoodStoring
   private let queryBuilder = FoodSearchQueryBuilder()
   private let resultRanker = FoodSearchResultRanker()
   private let resolver = ServingResolutionService()
@@ -58,9 +59,11 @@ final class LogViewModel: ObservableObject {
   init(
     parser: (any FoodDescriptionParsing)? = nil,
     provider: (any FoodDataProviding)? = nil,
-    numberParser: LocalizedNumberParser = LocalizedNumberParser()
+    numberParser: LocalizedNumberParser = LocalizedNumberParser(),
+    rememberedFoods: (any RememberedFoodStoring)? = nil
   ) {
     self.numberParser = numberParser
+    self.rememberedFoods = rememberedFoods ?? UserDefaultsRememberedFoodStore()
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-ui-testing")
     if let parser {
       self.parser = parser
@@ -176,6 +179,7 @@ final class LogViewModel: ObservableObject {
   }
 
   func markSaved() {
+    rememberConfirmedSelectionIfPossible()
     stage = .completed
     message = "Entry saved on this device."
   }
@@ -394,7 +398,9 @@ final class LogViewModel: ObservableObject {
       let response = try await provider.search(request)
     #endif
     guard isCurrentOperation(generation) else { return }
-    results = resultRanker.rank(response.foods, for: rankingIntent)
+    let preferred = rememberedFoods.load().preferredFdcIDs(forQuery: request.query)
+    results = resultRanker.rank(
+      response.foods, for: rankingIntent, preferredFdcIDs: preferred)
     if results.isEmpty {
       fail(
         .noResults,
@@ -461,6 +467,23 @@ final class LogViewModel: ObservableObject {
           "The serving and nutrition bases could not be combined safely. Enter servings or grams."
       }
     }
+  }
+
+  /// Records a confirmed USDA pick for future ranking boosts only — never auto-selects.
+  private func rememberConfirmedSelectionIfPossible() {
+    guard let details, details.fdcID > 0 else { return }
+    let query =
+      manualSearchTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? (parsed?.searchTerms ?? parsed?.productName ?? input)
+      : manualSearchTerms
+    var catalog = rememberedFoods.load()
+    catalog.remember(
+      query: query,
+      fdcID: details.fdcID,
+      displayName: details.description,
+      brand: details.brandOwner ?? parsed?.brand
+    )
+    rememberedFoods.save(catalog)
   }
 }
 

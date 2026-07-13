@@ -70,8 +70,11 @@ struct SettingsView: View {
   private let configuration = AppConfiguration.current
 
   @State private var confirmsCacheClear = false
+  @State private var confirmsRememberedClear = false
   @State private var cacheResultMessage: String?
+  @State private var rememberedResultMessage: String?
   @State private var healthSettings = HealthSyncSettingsModel()
+  private let rememberedFoods = UserDefaultsRememberedFoodStore()
 
   var body: some View {
     List {
@@ -93,6 +96,17 @@ struct SettingsView: View {
 
         Text(
           "Clearing the cache does not delete logged entries. Food details will be downloaded again when needed."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+        Button("Clear remembered food matches", systemImage: "clock.arrow.circlepath") {
+          confirmsRememberedClear = true
+        }
+        .accessibilityIdentifier("clear-remembered-foods")
+
+        Text(
+          "Remembered matches only reorder USDA results after you confirm a food. They never auto-select nutrition."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -153,6 +167,17 @@ struct SettingsView: View {
     } message: {
       Text(cacheResultMessage ?? "")
     }
+    .alert("Clear remembered matches?", isPresented: $confirmsRememberedClear) {
+      Button("Clear Matches", role: .destructive, action: clearRememberedFoods)
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Prior USDA ranking boosts will be forgotten. Logged entries stay on this device.")
+    }
+    .alert("Remembered matches", isPresented: rememberedResultPresented) {
+      Button("OK", role: .cancel) { rememberedResultMessage = nil }
+    } message: {
+      Text(rememberedResultMessage ?? "")
+    }
   }
 
   private var providerDisplayDescription: String {
@@ -188,6 +213,18 @@ struct SettingsView: View {
       get: { cacheResultMessage != nil },
       set: { if !$0 { cacheResultMessage = nil } }
     )
+  }
+
+  private var rememberedResultPresented: Binding<Bool> {
+    Binding(
+      get: { rememberedResultMessage != nil },
+      set: { if !$0 { rememberedResultMessage = nil } }
+    )
+  }
+
+  private func clearRememberedFoods() {
+    rememberedFoods.clear()
+    rememberedResultMessage = "Remembered food matches were cleared."
   }
 
   private func clearCache() {

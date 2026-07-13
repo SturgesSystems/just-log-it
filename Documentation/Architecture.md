@@ -20,6 +20,8 @@ After grounding, a deterministic `ClarificationPolicy` in JustLogItCore decides 
 
 When the policy returns `.clarify`, `LogViewModel` enters `.awaitingClarification` with an `activeQuestion` and keeps a transient `FoodInterpretationDraft`. User freeform or suggested answers flow through `applyUserAnswer` and re-decision; only `.proceed` starts USDA search. Require-edit and fallback-manual still use the existing recovery card.
 
+After a confirmed USDA save, `RememberedFoodCatalog` stores a normalized lookup signature → FDC ID mapping (UserDefaults). Later searches apply a bounded ranker boost for matching FDC IDs only; the person still chooses the match. Settings can clear remembered matches without deleting log entries.
+
 `Packages/JustLogItCore` has no SwiftUI, SwiftData, FoundationModels, or HealthKit dependency and can be tested from Command Line Tools.
 
 `HealthKitNutritionWriter` maps every supported USDA nutrient to its exact HealthKit dietary type and writes one food correlation. `HealthSyncCoordinator` keeps logging local-first and persists pending, synced, denied, failed, or deletion-pending state. Authorization is requested only from explicit user actions: enabling sync in Settings or tapping **Try Apple Health Again** for a denied/failed entry. Automatic entry saving and reconciliation never present permission UI, and the app requests write access only.

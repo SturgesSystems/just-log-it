@@ -1,7 +1,8 @@
 # P2 — Remembered foods
 
-- Store normalized input/search signatures mapped to previously selected FDC IDs
-- Give prior selections a bounded deterministic ranking boost
-- Always require confirmation
-- Show and clear remembered selections in Settings
-- Measure repeat-flow time and incorrect-alias recovery
+- [x] Store normalized input/search signatures mapped to previously selected FDC IDs (`RememberedFoodCatalog` + `UserDefaultsRememberedFoodStore`)
+- [x] Give prior selections a bounded deterministic ranking boost (`FoodSearchResultRanker.rememberedSelectionBoost`)
+- [x] Always require confirmation (boost only; never auto-select)
+- [x] Clear remembered selections in Settings
+- [ ] Show a browsable list of remembered selections in Settings / sidebar
+- [ ] Measure repeat-flow time and incorrect-alias recovery
