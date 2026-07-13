@@ -8,6 +8,7 @@ final class LogViewModel: ObservableObject {
   enum Stage: Equatable {
     case idle
     case parsing
+    case awaitingClarification
     case searching
     case choosing
     case loadingDetails
@@ -35,6 +36,8 @@ final class LogViewModel: ObservableObject {
   @Published private(set) var nutrients: [NutrientAmount] = []
   @Published private(set) var message: String?
   @Published private(set) var failureKind: FailureKind?
+  @Published private(set) var activeQuestion: ClarificationQuestion?
+  @Published var clarificationAnswer = ""
   @Published var clarificationServings = ""
   @Published var clarificationGrams = ""
   @Published var showManualEntry = false
@@ -46,6 +49,9 @@ final class LogViewModel: ObservableObject {
   private let resolver = ServingResolutionService()
   private let calculator = NutritionCalculator()
   private let numberParser: LocalizedNumberParser
+  private let interpretationValidator = FoodInterpretationValidator()
+  private let clarificationPolicy = ClarificationPolicy()
+  private var interpretationDraft: FoodInterpretationDraft?
   private var operation: Task<Void, Never>?
   private var operationGeneration: UInt = 0
 
@@ -98,9 +104,34 @@ final class LogViewModel: ObservableObject {
     }
   }
 
+  var canSubmitClarificationAnswer: Bool {
+    !clarificationAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
   func canResolveClarificationQuantity(usingServings: Bool) -> Bool {
     let text = usingServings ? clarificationServings : clarificationGrams
     return numberParser.parse(text, minimum: .greaterThanZero) != nil
+  }
+
+  /// Applies the free-form or suggested answer to the active interpretation question.
+  func submitClarificationAnswer() {
+    let answer = clarificationAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !answer.isEmpty, let question = activeQuestion, let draft = interpretationDraft else {
+      return
+    }
+    let updated = clarificationPolicy.applyUserAnswer(answer, to: draft, for: question)
+    interpretationDraft = updated
+    clarificationAnswer = ""
+    routeInterpretationDecision(
+      clarificationPolicy.decide(updated),
+      sourceText: updated.sourceText.isEmpty ? input : updated.sourceText,
+      generation: beginOperation()
+    )
+  }
+
+  func chooseClarificationSuggestion(_ suggestion: String) {
+    clarificationAnswer = suggestion
+    submitClarificationAnswer()
   }
 
   func resolveWithServings() {
@@ -172,6 +203,7 @@ final class LogViewModel: ObservableObject {
     nutrients = []
     message = nil
     failureKind = nil
+    clearInterpretationClarification()
     clarificationServings = ""
     clarificationGrams = ""
     stage = .idle
@@ -179,6 +211,7 @@ final class LogViewModel: ObservableObject {
 
   func cancel() {
     invalidateOperation()
+    clearInterpretationClarification()
     stage = .idle
     message = nil
     failureKind = nil
@@ -209,26 +242,25 @@ final class LogViewModel: ObservableObject {
     stage = .parsing
     message = nil
     failureKind = nil
+    clearInterpretationClarification()
     let request: ParsedFoodRequest
     do {
       let parsed = try await parser.parse(text)
       guard isCurrentOperation(generation) else { return }
 
-      let draft = FoodInterpretationValidator().draft(
+      let draft = interpretationValidator.draft(
         from: parsed,
         sourceText: text,
         evidenceKind: .typedText
       )
-      switch ClarificationPolicy().decide(draft) {
+      interpretationDraft = draft
+      switch clarificationPolicy.decide(draft) {
       case .proceed(let proceeded):
         self.parsed = proceeded
         manualSearchTerms = queryBuilder.build(from: proceeded).query
         request = proceeded
       case .clarify(let question):
-        if manualSearchTerms.isEmpty {
-          manualSearchTerms = text
-        }
-        fail(.interpretation, message: question.prompt)
+        presentInterpretationClarification(question, draft: draft, sourceText: text)
         return
       case .requireEdit(let message):
         manualSearchTerms = text
@@ -254,6 +286,63 @@ final class LogViewModel: ObservableObject {
       return
     }
 
+    await runSearch(for: request, generation: generation)
+  }
+
+  /// Routes a policy decision after the user answers an interpretation question.
+  private func routeInterpretationDecision(
+    _ decision: ClarificationDecision,
+    sourceText: String,
+    generation: UInt
+  ) {
+    switch decision {
+    case .proceed(let proceeded):
+      clearInterpretationClarification(keepDraft: false)
+      parsed = proceeded
+      manualSearchTerms = queryBuilder.build(from: proceeded).query
+      operation = Task { [weak self] in
+        await self?.runSearch(for: proceeded, generation: generation)
+      }
+    case .clarify(let question):
+      if let draft = interpretationDraft {
+        presentInterpretationClarification(question, draft: draft, sourceText: sourceText)
+      } else {
+        manualSearchTerms = sourceText
+        fail(.interpretation, message: question.prompt)
+      }
+    case .requireEdit(let message):
+      manualSearchTerms = sourceText
+      fail(.interpretation, message: message)
+    case .fallbackManual(let message):
+      manualSearchTerms = sourceText
+      fail(.interpretation, message: message)
+    }
+  }
+
+  private func presentInterpretationClarification(
+    _ question: ClarificationQuestion,
+    draft: FoodInterpretationDraft,
+    sourceText: String
+  ) {
+    interpretationDraft = draft
+    activeQuestion = question
+    message = question.prompt
+    failureKind = nil
+    if manualSearchTerms.isEmpty {
+      manualSearchTerms = sourceText
+    }
+    stage = .awaitingClarification
+  }
+
+  private func clearInterpretationClarification(keepDraft: Bool = false) {
+    activeQuestion = nil
+    clarificationAnswer = ""
+    if !keepDraft {
+      interpretationDraft = nil
+    }
+  }
+
+  private func runSearch(for request: ParsedFoodRequest, generation: UInt) async {
     do {
       try await search(
         queryBuilder.build(from: request), rankingIntent: request, generation: generation)
@@ -342,6 +431,7 @@ final class LogViewModel: ObservableObject {
   }
 
   private func fail(_ kind: FailureKind, message: String) {
+    clearInterpretationClarification()
     failureKind = kind
     self.message = message
     stage = .failed

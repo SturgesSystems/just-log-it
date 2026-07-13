@@ -52,7 +52,7 @@ public struct ClarificationPolicy: Sendable {
         ClarificationQuestion(
           code: .multipleFoods,
           prompt: "It looks like more than one food. Which one do you want to log?",
-          suggestedAnswers: [],
+          suggestedAnswers: Self.multipleFoodSuggestions(from: validated),
           allowsFreeform: true
         )
       )
@@ -194,6 +194,40 @@ public struct ClarificationPolicy: Sendable {
       return true
     }
     return false
+  }
+
+  /// Best-effort split of conjunctions for suggested single-food answers.
+  /// Deterministic and conservative — freeform remains available.
+  private static func multipleFoodSuggestions(from draft: FoodInterpretationDraft) -> [String] {
+    let source = draft.sourceText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let product = draft.trimmedIdentity
+    let candidates = [source, product].filter { !$0.isEmpty }
+    guard let text = candidates.first else { return [] }
+
+    let separators = [" and ", " & ", ",", " plus ", " with "]
+    var pieces: [String] = [text]
+    for separator in separators {
+      pieces = pieces.flatMap { chunk in
+        chunk
+          .components(separatedBy: separator)
+          .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+      }
+    }
+
+    var seen = Set<String>()
+    var suggestions: [String] = []
+    for piece in pieces {
+      let key = piece.lowercased()
+      guard !seen.contains(key), piece.count >= 2, piece.count <= 60 else { continue }
+      // Skip fragments that still look like multi-food clauses.
+      if key.contains(" and ") || key.contains(" & ") { continue }
+      seen.insert(key)
+      suggestions.append(piece)
+      if suggestions.count == 4 { break }
+    }
+    // Only surface suggestions when we actually split into multiple options.
+    return suggestions.count >= 2 ? suggestions : []
   }
 
   private static func parsePositiveQuantity(_ text: String) -> Double? {

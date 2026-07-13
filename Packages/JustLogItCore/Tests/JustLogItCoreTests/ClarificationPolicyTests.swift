@@ -355,3 +355,25 @@ import Testing
   }
   #expect(checked > 0, "Expected to find Swift sources under \(sourcesRoot.path)")
 }
+
+@Test func multipleFoodsClarificationIncludesSplitSuggestions() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs and bacon",
+    searchTerms: "eggs and bacon",
+    containsMultipleFoods: true
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "eggs and bacon",
+    evidenceKind: .typedText
+  )
+  let decision = ClarificationPolicy().decide(draft)
+  guard case .clarify(let question) = decision else {
+    Issue.record("Expected clarify, got \(decision)")
+    return
+  }
+  #expect(question.code == .multipleFoods)
+  #expect(question.suggestedAnswers.count >= 2)
+  #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("eggs"))
+  #expect(question.suggestedAnswers.map { $0.lowercased() }.contains("bacon"))
+}

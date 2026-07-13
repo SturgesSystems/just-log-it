@@ -75,8 +75,11 @@ The model may propose. Deterministic code validates and routes. The user resolve
 ### Phase 2 — Text integration
 
 - [x] Route current Foundation Models output through the engine before USDA search (thin `LogViewModel` gate; policy blocks empty identity / multi-food silent proceed)
-- [ ] Replace one-off clarification states with generic question/answer UI while preserving USDA and manual fallbacks
+- [x] Generic interpretation clarification stage (`.awaitingClarification`) with freeform + suggestion answers via `ClarificationPolicy.applyUserAnswer`
+- [x] Log UI card for active `ClarificationQuestion` with Continue, Manual, and Edit Description paths
+- [x] App unit tests: multi-food presents Q&A without search; answering proceeds to USDA; empty answer ignored
 - [ ] Instrument clarification count, abandonment, and correction locally in test builds only; add no analytics
+- [ ] Replace post-USDA quantity `clarifying` stage with the same generic question contract (still uses servings/grams fields)
 
 ### Phase 3 — Composite and photo adapters
 

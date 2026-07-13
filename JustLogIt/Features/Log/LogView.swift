@@ -7,6 +7,7 @@ struct LogView: View {
     case description
     case manualSearch
     case quantity
+    case clarificationAnswer
   }
 
   private enum QuantityMode: String, CaseIterable, Identifiable {
@@ -48,8 +49,13 @@ struct LogView: View {
         if stage == .idle || stage == .parsing {
           quantityMode = .servings
         }
-        if stage != .idle && stage != .failed && stage != .clarifying {
+        if stage != .idle && stage != .failed && stage != .clarifying
+          && stage != .awaitingClarification
+        {
           focusedField = nil
+        }
+        if stage == .awaitingClarification {
+          focusedField = .clarificationAnswer
         }
         withAnimation(reduceMotion ? nil : .snappy) {
           proxy.scrollTo(currentAnchor, anchor: .bottom)
@@ -85,6 +91,8 @@ struct LogView: View {
         EmptyView()
       case .parsing:
         ProcessingRow(title: "Understanding your description")
+      case .awaitingClarification:
+        interpretationClarificationCard
       case .searching:
         ProcessingRow(title: "Finding USDA matches")
       case .choosing:
@@ -203,6 +211,87 @@ struct LogView: View {
     }
     .padding(16)
     .frame(maxWidth: .infinity, alignment: .leading)
+    .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
+  }
+
+  private var interpretationClarificationCard: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("A quick clarification")
+        .font(.title2.bold())
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("clarification-title")
+
+      if let question = model.activeQuestion {
+        Text(question.prompt)
+          .font(.body)
+          .accessibilityIdentifier("clarification-prompt")
+
+        if !question.suggestedAnswers.isEmpty {
+          VStack(alignment: .leading, spacing: 8) {
+            ForEach(question.suggestedAnswers, id: \.self) { suggestion in
+              Button {
+                focusedField = nil
+                model.chooseClarificationSuggestion(suggestion)
+              } label: {
+                Text(suggestion)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .padding(.horizontal, 14)
+                  .padding(.vertical, 12)
+                  .contentShape(.rect)
+              }
+              .buttonStyle(.plain)
+              .background(.background, in: .rect(cornerRadius: 12))
+              .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                  .stroke(.separator, lineWidth: 0.5)
+              }
+              .accessibilityIdentifier("clarification-suggestion")
+            }
+          }
+        }
+
+        if question.allowsFreeform {
+          TextField("Your answer", text: $model.clarificationAnswer, axis: .vertical)
+            .lineLimit(1...3)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.background, in: .rect(cornerRadius: 12))
+            .overlay {
+              RoundedRectangle(cornerRadius: 12)
+                .stroke(.separator, lineWidth: 0.5)
+            }
+            .focused($focusedField, equals: .clarificationAnswer)
+            .submitLabel(.continue)
+            .onSubmit {
+              if model.canSubmitClarificationAnswer {
+                focusedField = nil
+                model.submitClarificationAnswer()
+              }
+            }
+            .accessibilityIdentifier("clarification-answer")
+
+          Button("Continue", systemImage: "arrow.right") {
+            focusedField = nil
+            model.submitClarificationAnswer()
+          }
+          .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .disabled(!model.canSubmitClarificationAnswer)
+          .accessibilityIdentifier("clarification-continue")
+        }
+      }
+
+      Menu("Other Options", systemImage: "ellipsis.circle") {
+        Button("Edit Description", systemImage: "pencil") {
+          model.cancel()
+          focusedField = .description
+        }
+        Button("Enter Nutrition Manually", systemImage: "square.and.pencil") {
+          model.showManualEntry = true
+        }
+      }
+    }
+    .padding(16)
     .background(.secondary.opacity(0.1), in: .rect(cornerRadius: 16))
   }
 
@@ -497,7 +586,7 @@ struct LogView: View {
       }
     case .failed:
       dockContainer { searchComposer }
-    case .choosing, .clarifying:
+    case .choosing, .clarifying, .awaitingClarification:
       EmptyView()
     }
   }
