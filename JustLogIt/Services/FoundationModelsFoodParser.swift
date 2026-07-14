@@ -382,12 +382,3 @@ struct FoundationModelsFoodParser: FoodDescriptionParsing {
     return value
   }
 }
-
-struct MockFoodParser: FoodDescriptionParsing {
-  func parse(_ input: String) async throws -> ParsedFoodRequest {
-    if ProcessInfo.processInfo.arguments.contains("-ui-testing-parser-failure") {
-      throw FoodParserError.invalidResponse
-    }
-    return ParsedFoodRequest(productName: input, searchTerms: input, quantity: 1, unit: "serving")
-  }
-}

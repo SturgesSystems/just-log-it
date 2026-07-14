@@ -43,7 +43,13 @@ public struct ClarificationPolicy: Sendable {
     // Prefer model componentNames; otherwise recover from source "X with Y" / "X and Y".
     if validated.turnCount < maxTurns {
       var components = Self.dedupedComponentNames(validated.componentNames)
-      if components.count < 2 {
+      // Recover components from source text only on the initial interpretation
+      // when the model was silent. An explicit model clarify prompt ("which
+      // one?") means ask the user; and once the user has answered a turn we must
+      // not re-split the original "X and Y" source into a composite.
+      if components.count < 2, validated.turnCount == 0,
+        validated.modelClarificationPrompt == nil
+      {
         components = Self.dedupedComponentNames(
           Self.inferredComponents(from: validated.sourceText))
       }

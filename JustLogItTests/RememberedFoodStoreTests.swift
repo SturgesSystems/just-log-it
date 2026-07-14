@@ -92,7 +92,9 @@ final class RememberedFoodStoreTests: XCTestCase {
     model2.input = "cookie"
     model2.manualSearchTerms = "cookie"
     model2.submit()
-    await waitUntil { model2.stage == .choosing }
+    // The remembered pick is now high-confidence, so it auto-selects past the
+    // picker; assert on the ranked results, which carry the memory boost.
+    await waitUntil { !model2.results.isEmpty }
 
     XCTAssertEqual(model2.results.first?.fdcID, 99)
     XCTAssertEqual(model2.results.map(\.fdcID).sorted(), [1, 99])

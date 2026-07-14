@@ -3,37 +3,6 @@ import JustLogItCore
 import SwiftData
 import SwiftUI
 
-/// A single turn in the logging conversation transcript.
-enum ConversationTurn: Identifiable, Equatable {
-  /// User text, optionally with a photo (bytes stay on-device for the session only).
-  case user(id: UUID, text: String, imageData: Data?)
-  case system(id: UUID, text: String)
-
-  var id: UUID {
-    switch self {
-    case .user(let id, _, _), .system(let id, _):
-      return id
-    }
-  }
-
-  var isUser: Bool {
-    if case .user = self { return true }
-    return false
-  }
-
-  var text: String {
-    switch self {
-    case .user(_, let text, _), .system(_, let text):
-      return text
-    }
-  }
-
-  var imageData: Data? {
-    if case .user(_, _, let data) = self { return data }
-    return nil
-  }
-}
-
 @MainActor
 final class LogViewModel: ObservableObject {
   enum Stage: Equatable {
@@ -60,59 +29,59 @@ final class LogViewModel: ObservableObject {
 
   @Published var input = ""
   @Published var manualSearchTerms = ""
-  @Published private(set) var stage: Stage = .idle
-  @Published private(set) var parsed: ParsedFoodRequest?
-  @Published private(set) var results: [FoodSearchResult] = []
-  @Published private(set) var selectedResult: FoodSearchResult?
-  @Published private(set) var details: FoodDetails?
-  @Published private(set) var resolution: ServingResolution?
-  @Published private(set) var nutrients: [NutrientAmount] = []
-  @Published private(set) var message: String?
-  @Published private(set) var failureKind: FailureKind?
-  @Published private(set) var activeQuestion: ClarificationQuestion?
+  @Published var stage: Stage = .idle
+  @Published var parsed: ParsedFoodRequest?
+  @Published var results: [FoodSearchResult] = []
+  @Published var selectedResult: FoodSearchResult?
+  @Published var details: FoodDetails?
+  @Published var resolution: ServingResolution?
+  @Published var nutrients: [NutrientAmount] = []
+  @Published var message: String?
+  @Published var failureKind: FailureKind?
+  @Published var activeQuestion: ClarificationQuestion?
   @Published var clarificationAnswer = ""
   @Published var clarificationServings = ""
   @Published var clarificationGrams = ""
   @Published var showManualEntry = false
   /// When non-empty, `makeRecord()` saves a multi-component composite entry.
-  @Published private(set) var compositeComponents: [CompositeComponentSnapshot] = []
+  @Published var compositeComponents: [CompositeComponentSnapshot] = []
   /// Remaining component names while assembling a multi-food log.
-  @Published private(set) var pendingCompositeNames: [String] = []
+  @Published var pendingCompositeNames: [String] = []
   /// Human label for the meal while building composites (original user text).
-  @Published private(set) var compositeSessionSource: String = ""
+  @Published var compositeSessionSource: String = ""
   /// Which component is currently being matched (for UI chrome).
-  @Published private(set) var activeCompositeComponent: String?
+  @Published var activeCompositeComponent: String?
 
-  @Published private(set) var transcript: [ConversationTurn] = []
+  @Published var transcript: [ConversationTurn] = []
   @Published var whenEatenAnswer = ""
-  @Published private(set) var consumedAt: Date = .now
+  @Published var consumedAt: Date = .now
   /// When set from clear wording (“just ate”, “for breakfast”), shown on review and we skip asking.
-  @Published private(set) var consumedAtInference: MealTimeInference?
-  @Published private(set) var lastSavedEntryID: UUID?
-  @Published private(set) var lastSavedRecognizedFoodID: UUID?
+  @Published var consumedAtInference: MealTimeInference?
+  @Published var lastSavedEntryID: UUID?
+  @Published var lastSavedRecognizedFoodID: UUID?
 
   /// Chips for the when-eaten step (meal-aware when we have a soft inference).
   var whenEatenSuggestionChips: [String] {
     MealTimeInferenceService.suggestionChips(for: consumedAtInference)
   }
 
-  private let parser: any FoodDescriptionParsing
-  private let imageProposer: FoundationModelsImageFoodProposer
-  private let provider: any FoodDataProviding
-  private let rememberedFoods: any RememberedFoodStoring
-  private let queryBuilder = FoodSearchQueryBuilder()
-  private let resultRanker = FoodSearchResultRanker()
-  private let resolver = ServingResolutionService()
-  private let calculator = NutritionCalculator()
-  private let numberParser: LocalizedNumberParser
-  private let interpretationValidator = FoodInterpretationValidator()
-  private let clarificationPolicy = ClarificationPolicy()
-  private var interpretationDraft: FoodInterpretationDraft?
-  private var operation: Task<Void, Never>?
-  private var operationGeneration: UInt = 0
+  let parser: any FoodDescriptionParsing
+  let imageProposer: FoundationModelsImageFoodProposer
+  let provider: any FoodDataProviding
+  let rememberedFoods: any RememberedFoodStoring
+  let queryBuilder = FoodSearchQueryBuilder()
+  let resultRanker = FoodSearchResultRanker()
+  let resolver = ServingResolutionService()
+  let calculator = NutritionCalculator()
+  let numberParser: LocalizedNumberParser
+  let interpretationValidator = FoodInterpretationValidator()
+  let clarificationPolicy = ClarificationPolicy()
+  var interpretationDraft: FoodInterpretationDraft?
+  var operation: Task<Void, Never>?
+  var operationGeneration: UInt = 0
   /// When true, the next `submit()` will not append a user turn (used after edit rewind).
-  private var skipNextUserTranscriptAppend = false
-  private var compositeSessionActive = false
+  var skipNextUserTranscriptAppend = false
+  var compositeSessionActive = false
 
   var isBuildingComposite: Bool {
     compositeSessionActive
@@ -480,7 +449,7 @@ final class LogViewModel: ObservableObject {
   }
 
   /// Applies clear meal-time cues from the original message onto review.
-  private func refreshConsumedAtInference() {
+  func refreshConsumedAtInference() {
     let source = loggingSourceText
     let inference = MealTimeInferenceService.infer(from: source)
     consumedAtInference = inference
@@ -489,7 +458,7 @@ final class LogViewModel: ObservableObject {
     }
   }
 
-  private func presentReview() {
+  func presentReview() {
     refreshConsumedAtInference()
     stage = .reviewing
   }
@@ -543,7 +512,7 @@ final class LogViewModel: ObservableObject {
   }
 
   /// Original user text for saves (chat clears `input` after send).
-  private var loggingSourceText: String {
+  var loggingSourceText: String {
     if !compositeSessionSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return compositeSessionSource
     }
@@ -606,7 +575,7 @@ final class LogViewModel: ObservableObject {
     stage = .idle
   }
 
-  private func clearCompositeSession() {
+  func clearCompositeSession() {
     compositeComponents = []
     pendingCompositeNames = []
     compositeSessionSource = ""
@@ -620,621 +589,5 @@ final class LogViewModel: ObservableObject {
     stage = .idle
     message = nil
     failureKind = nil
-  }
-
-  // MARK: - Private
-
-  private func appendUserTurn(_ text: String, imageData: Data? = nil) {
-    transcript.append(.user(id: UUID(), text: text, imageData: imageData))
-  }
-
-  private func appendSystemTurn(_ text: String) {
-    transcript.append(.system(id: UUID(), text: text))
-  }
-
-  private func clearPipelineState() {
-    parsed = nil
-    results = []
-    selectedResult = nil
-    details = nil
-    resolution = nil
-    nutrients = []
-    clearInterpretationClarification()
-    clarificationServings = ""
-    clarificationGrams = ""
-    // Abort in-flight multi-food assembly when rewinding/canceling the pipeline.
-    if compositeSessionActive {
-      clearCompositeSession()
-    }
-  }
-
-  private func beginOperation() -> UInt {
-    invalidateOperation()
-    failureKind = nil
-    return operationGeneration
-  }
-
-  private func invalidateOperation() {
-    operation?.cancel()
-    operation = nil
-    operationGeneration &+= 1
-  }
-
-  private func isCurrentOperation(_ generation: UInt) -> Bool {
-    operationGeneration == generation && !Task.isCancelled
-  }
-
-  private func submitFlow(text: String, generation: UInt) async {
-    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else {
-      fail(.interpretation, message: "Enter a food description first.")
-      return
-    }
-
-    await runInterpretation(
-      parseInput: text,
-      evidenceText: text,
-      turnCount: 0,
-      generation: generation
-    )
-  }
-
-  /// Re-interpret after a clarification reply (model harness — not field patching).
-  private func clarificationReparseFlow(
-    parseInput: String,
-    evidenceText: String,
-    turnCount: Int,
-    generation: UInt
-  ) async {
-    await runInterpretation(
-      parseInput: parseInput,
-      evidenceText: evidenceText,
-      turnCount: turnCount,
-      generation: generation
-    )
-  }
-
-  private func runInterpretation(
-    parseInput: String,
-    evidenceText: String,
-    turnCount: Int,
-    generation: UInt
-  ) async {
-    stage = .parsing
-    message = nil
-    failureKind = nil
-    clearInterpretationClarification()
-    results = []
-    selectedResult = nil
-    details = nil
-    resolution = nil
-    nutrients = []
-    whenEatenAnswer = ""
-    consumedAt = .now
-
-    let request: ParsedFoodRequest
-    do {
-      let parsed = try await parser.parse(parseInput)
-      guard isCurrentOperation(generation) else { return }
-
-      let draft = interpretationValidator.draft(
-        from: parsed,
-        sourceText: evidenceText,
-        evidenceKind: .typedText,
-        turnCount: turnCount
-      )
-      interpretationDraft = draft
-      switch clarificationPolicy.decide(draft) {
-      case .proceed(let proceeded):
-        self.parsed = proceeded
-        manualSearchTerms = queryBuilder.build(from: proceeded).query
-        request = proceeded
-        // No status log — the USDA picker is the next conversational beat.
-      case .beginComposite(let names, let sourceText):
-        beginCompositeSession(componentNames: names, sourceText: sourceText, generation: generation)
-        return
-      case .clarify(let question):
-        presentInterpretationClarification(
-          question, draft: draft, sourceText: evidenceText)
-        return
-      case .requireEdit(let message):
-        manualSearchTerms = evidenceText
-        fail(.interpretation, message: message)
-        return
-      case .fallbackManual(let message):
-        manualSearchTerms = evidenceText
-        fail(.interpretation, message: message)
-        return
-      }
-    } catch is CancellationError {
-      return
-    } catch {
-      guard isCurrentOperation(generation) else { return }
-      let failureMessage =
-        (error as? LocalizedError)?.errorDescription
-        ?? "Couldn’t interpret that. Search manually or try again."
-      fail(.interpretation, message: failureMessage)
-      return
-    }
-
-    await runSearch(for: request, generation: generation)
-  }
-
-  private func imageProposalFlow(
-    data: Data,
-    caption: String?,
-    generation: UInt
-  ) async {
-    stage = .parsing
-    message = nil
-    failureKind = nil
-    clearInterpretationClarification()
-    results = []
-    selectedResult = nil
-    details = nil
-    resolution = nil
-    nutrients = []
-    whenEatenAnswer = ""
-    consumedAt = .now
-
-    do {
-      let proposed = try await imageProposer.propose(imageData: data, caption: caption)
-      guard isCurrentOperation(generation) else { return }
-
-      let sourceText = caption ?? proposed.productName
-      input = sourceText
-      // Photo already appears in the transcript from proposeFromImage.
-
-      let draft = interpretationValidator.draft(
-        from: proposed,
-        sourceText: sourceText,
-        evidenceKind: .photoObservation
-      )
-      interpretationDraft = draft
-      switch clarificationPolicy.decide(draft) {
-      case .proceed(let proceeded):
-        parsed = proceeded
-        manualSearchTerms = queryBuilder.build(from: proceeded).query
-        await runSearch(for: proceeded, generation: generation)
-      case .beginComposite(let names, let sourceText):
-        beginCompositeSession(componentNames: names, sourceText: sourceText, generation: generation)
-      case .clarify(let question):
-        presentInterpretationClarification(question, draft: draft, sourceText: sourceText)
-      case .requireEdit(let message):
-        manualSearchTerms = sourceText
-        fail(.interpretation, message: message)
-      case .fallbackManual(let message):
-        manualSearchTerms = sourceText
-        fail(.interpretation, message: message)
-      }
-    } catch is CancellationError {
-      return
-    } catch {
-      guard isCurrentOperation(generation) else { return }
-      if let caption {
-        input = caption
-        manualSearchTerms = caption
-      }
-      let failureMessage =
-        (error as? FoodParserError)?.errorDescription
-        ?? "Photo identification wasn’t available. Describe the food in text or enter nutrition manually."
-      fail(.interpretation, message: failureMessage)
-    }
-  }
-
-  /// Routes a policy decision after the user answers an interpretation question.
-  private func routeInterpretationDecision(
-    _ decision: ClarificationDecision,
-    sourceText: String,
-    generation: UInt
-  ) {
-    switch decision {
-    case .proceed(let proceeded):
-      clearInterpretationClarification(keepDraft: false)
-      parsed = proceeded
-      manualSearchTerms = queryBuilder.build(from: proceeded).query
-      operation = Task { [weak self] in
-        await self?.runSearch(for: proceeded, generation: generation)
-      }
-    case .beginComposite(let names, let compositeSource):
-      clearInterpretationClarification(keepDraft: false)
-      beginCompositeSession(
-        componentNames: names, sourceText: compositeSource, generation: generation)
-    case .clarify(let question):
-      if let draft = interpretationDraft {
-        presentInterpretationClarification(question, draft: draft, sourceText: sourceText)
-      } else {
-        manualSearchTerms = sourceText
-        fail(.interpretation, message: question.prompt)
-      }
-    case .requireEdit(let message):
-      manualSearchTerms = sourceText
-      fail(.interpretation, message: message)
-    case .fallbackManual(let message):
-      manualSearchTerms = sourceText
-      fail(.interpretation, message: message)
-    }
-  }
-
-  // MARK: - Composite multi-food session
-
-  private func beginCompositeSession(
-    componentNames: [String],
-    sourceText: String,
-    generation: UInt
-  ) {
-    let names = componentNames
-      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-      .filter { !$0.isEmpty }
-    guard names.count >= 2 else {
-      fail(.interpretation, message: "Couldn’t split that into separate foods. Try naming them.")
-      return
-    }
-    compositeSessionActive = true
-    compositeSessionSource = sourceText
-    compositeComponents = []
-    pendingCompositeNames = names
-    let list = names.joined(separator: " · ")
-    appendSystemTurn("I'll look up \(list) separately and put them in one log.")
-    advanceCompositeQueue(generation: generation)
-  }
-
-  private func advanceCompositeQueue(generation: UInt) {
-    guard let next = pendingCompositeNames.first else {
-      finishCompositeAssembly()
-      return
-    }
-    pendingCompositeNames.removeFirst()
-    activeCompositeComponent = next
-    // Keep leading counts ("1 Big Mac") so quantity resolves after USDA pick.
-    let request = CompositeComponentRequest.make(from: next)
-    parsed = request
-    manualSearchTerms = request.searchTerms.isEmpty ? next : request.searchTerms
-    results = []
-    selectedResult = nil
-    details = nil
-    resolution = nil
-    nutrients = []
-    let ordinal =
-      compositeComponents.isEmpty
-      ? "First"
-      : "Next"
-    appendSystemTurn("\(ordinal): \(next).")
-    operation = Task { [weak self] in
-      await self?.runSearch(for: request, generation: generation)
-    }
-  }
-
-  private func finishCompositeAssembly() {
-    compositeSessionActive = false
-    activeCompositeComponent = nil
-    pendingCompositeNames = []
-    guard !compositeComponents.isEmpty else {
-      fail(.interpretation, message: "No foods were added to the meal.")
-      return
-    }
-    let draft = CompositeDraftBuilder.make(
-      name: nil,
-      components: compositeComponents
-    )
-    nutrients = draft.totalNutrients
-    parsed = ParsedFoodRequest(
-      productName: draft.name,
-      searchTerms: draft.name,
-      containsMultipleFoods: true,
-      componentNames: compositeComponents.map(\.displayName)
-    )
-    // Review uses composite components; single-food details are optional.
-    details = nil
-    resolution = nil
-    selectedResult = nil
-    results = []
-    message = nil
-    appendSystemTurn("Here's the meal together.")
-    presentReview()
-  }
-
-  private func commitCompositeComponentIfNeeded() -> Bool {
-    guard compositeSessionActive, let details, let resolution else { return false }
-    let snap = CompositeComponentSnapshot(
-      displayName: details.description,
-      brand: details.brandOwner,
-      fdcID: details.fdcID,
-      quantityDisplay: resolution.displayText,
-      nutrients: nutrients,
-      isApproximate: parsed?.isApproximate == true
-    )
-    compositeComponents.append(snap)
-    let generation = beginOperation()
-    if pendingCompositeNames.isEmpty {
-      finishCompositeAssembly()
-    } else {
-      advanceCompositeQueue(generation: generation)
-    }
-    return true
-  }
-
-  private func presentInterpretationClarification(
-    _ question: ClarificationQuestion,
-    draft: FoodInterpretationDraft,
-    sourceText: String
-  ) {
-    interpretationDraft = draft
-    activeQuestion = question
-    message = question.prompt
-    failureKind = nil
-    if manualSearchTerms.isEmpty {
-      manualSearchTerms = sourceText
-    }
-    stage = .awaitingClarification
-    appendSystemTurn(question.prompt)
-  }
-
-  private func clearInterpretationClarification(keepDraft: Bool = false) {
-    activeQuestion = nil
-    clarificationAnswer = ""
-    if !keepDraft {
-      interpretationDraft = nil
-    }
-  }
-
-  private func runSearch(for request: ParsedFoodRequest, generation: UInt) async {
-    // Bare identity ("a Big Mac") → 1 serving so we can resolve without a quantity prompt.
-    let withQuantity = ParsedQuantityDefault.applyingDefaultIfNeeded(request)
-    parsed = withQuantity
-    do {
-      try await search(
-        queryBuilder.build(from: withQuantity),
-        rankingIntent: withQuantity,
-        generation: generation
-      )
-    } catch is CancellationError {
-      return
-    } catch {
-      guard isCurrentOperation(generation) else { return }
-      fail(
-        .search,
-        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
-      )
-    }
-  }
-
-  private func manualSearchFlow(generation: UInt) async {
-    let request = queryBuilder.manual(manualSearchTerms)
-    guard !request.query.isEmpty else {
-      fail(.search, message: "Enter food search terms first.")
-      return
-    }
-    if parsed == nil {
-      parsed = ParsedFoodRequest(productName: request.query, searchTerms: request.query)
-    }
-    // Manual re-search clears a prior selection / review.
-    selectedResult = nil
-    details = nil
-    resolution = nil
-    nutrients = []
-    whenEatenAnswer = ""
-    do {
-      let rankingIntent = ParsedFoodRequest(productName: request.query, searchTerms: request.query)
-      try await search(request, rankingIntent: rankingIntent, generation: generation)
-    } catch is CancellationError {
-      return
-    } catch {
-      guard isCurrentOperation(generation) else { return }
-      fail(
-        .search,
-        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
-      )
-    }
-  }
-
-  private func search(
-    _ request: FoodSearchRequest,
-    rankingIntent: ParsedFoodRequest,
-    generation: UInt
-  ) async throws {
-    stage = .searching
-    #if DEBUG
-      let response = try await AppPerformanceTrace.measure("USDA search") {
-        try await provider.search(request)
-      }
-    #else
-      let response = try await provider.search(request)
-    #endif
-    guard isCurrentOperation(generation) else { return }
-    let preferred = rememberedFoods.load().preferredFdcIDs(forQuery: request.query)
-    results = resultRanker.rank(
-      response.foods, for: rankingIntent, preferredFdcIDs: preferred)
-    if results.isEmpty {
-      fail(
-        .noResults,
-        message: "No USDA foods matched. Edit the search or enter nutrition manually."
-      )
-      return
-    }
-
-    // Strong identity (Big Mac, remembered pick, single clear hit) → skip the picker.
-    // User can still choose a different food from review.
-    if let auto = FoodSearchAutoSelect.highConfidencePick(
-      ranked: results,
-      for: rankingIntent,
-      preferredFdcIDs: preferred
-    ) {
-      selectedResult = auto
-      let label = auto.description.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !label.isEmpty {
-        appendSystemTurn("Using \(label).")
-      }
-      await selectionFlow(auto, generation: generation)
-      return
-    }
-
-    stage = .choosing
-  }
-
-  private func selectionFlow(_ result: FoodSearchResult, generation: UInt) async {
-    stage = .loadingDetails
-    message = nil
-    do {
-      let details = try await provider.foodDetails(fdcID: result.fdcID)
-      guard isCurrentOperation(generation) else { return }
-      self.details = details
-      // Default amount if still missing (manual pick without quantity in the parse).
-      let request =
-        parsed.map { ParsedQuantityDefault.applyingDefaultIfNeeded($0) }
-        ?? ParsedQuantityDefault.applyingDefaultIfNeeded(
-          ParsedFoodRequest(productName: details.description, searchTerms: details.description)
-        )
-      parsed = request
-      apply(resolver.resolve(request, against: details))
-    } catch is CancellationError {
-      return
-    } catch {
-      guard isCurrentOperation(generation) else { return }
-      fail(
-        .details,
-        message: (error as? LocalizedError)?.errorDescription
-          ?? "The selected food details could not be loaded."
-      )
-    }
-  }
-
-  private func fail(_ kind: FailureKind, message: String) {
-    clearInterpretationClarification()
-    failureKind = kind
-    self.message = message
-    stage = .failed
-    // Single assistant bubble — the recovery card only offers actions, not a second copy.
-    if transcript.last?.text != message {
-      appendSystemTurn(message)
-    }
-  }
-
-  private func apply(_ outcome: ServingResolutionOutcome) {
-    switch outcome {
-    case .needsClarification(let explanation):
-      if let details {
-        presentQuantityClarification(explanation: explanation, food: details)
-      } else {
-        stage = .clarifying
-        message = explanation
-        activeQuestion = ClarificationQuestion.quantity(explanation: explanation)
-      }
-    case .resolved(let resolution):
-      guard let details else { return }
-      do {
-        nutrients = try calculator.calculate(food: details, resolution: resolution)
-        guard nutrients.contains(where: { $0.key == .energy }) else {
-          presentQuantityClarification(
-            explanation:
-              "This USDA record does not provide enough compatible nutrition data. Choose another result or enter nutrition manually.",
-            food: details,
-            code: .missingQuantity
-          )
-          return
-        }
-        activeQuestion = nil
-        self.resolution = resolution
-        message = nil
-        if commitCompositeComponentIfNeeded() {
-          return
-        }
-        presentReview()
-      } catch {
-        presentQuantityClarification(
-          explanation:
-            "The serving and nutrition bases could not be combined safely. Enter servings or grams.",
-          food: details
-        )
-      }
-    }
-  }
-
-  private func presentQuantityClarification(
-    explanation: String,
-    food: FoodDetails,
-    code: AmbiguityCode = .missingQuantity
-  ) {
-    let grams: Double? = {
-      guard let size = food.servingSize, size.isFinite, size > 0 else { return nil }
-      let unit = food.servingSizeUnit?.lowercased() ?? ""
-      if unit == "g" || unit == "gram" || unit == "grams" { return size }
-      return nil
-    }()
-    let question = ClarificationQuestion.quantity(
-      explanation: explanation,
-      householdServing: food.householdServing,
-      servingSizeGrams: grams,
-      code: code
-    )
-    activeQuestion = question
-    message = question.prompt
-    failureKind = nil
-    stage = .clarifying
-    appendSystemTurn(question.prompt)
-  }
-
-  /// Records a confirmed USDA pick for future ranking boosts only — never auto-selects.
-  private func rememberConfirmedSelectionIfPossible() {
-    if !compositeComponents.isEmpty {
-      var catalog = rememberedFoods.load()
-      for component in compositeComponents {
-        guard let fdcID = component.fdcID, fdcID > 0 else { continue }
-        catalog.remember(
-          query: component.displayName,
-          fdcID: fdcID,
-          displayName: component.displayName,
-          brand: component.brand
-        )
-      }
-      rememberedFoods.save(catalog)
-      return
-    }
-    guard let details, details.fdcID > 0 else { return }
-    let query =
-      manualSearchTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      ? (parsed?.searchTerms ?? parsed?.productName ?? input)
-      : manualSearchTerms
-    var catalog = rememberedFoods.load()
-    catalog.remember(
-      query: query,
-      fdcID: details.fdcID,
-      displayName: details.description,
-      brand: details.brandOwner ?? parsed?.brand
-    )
-    rememberedFoods.save(catalog)
-  }
-
-}
-
-private struct MockFoodDataProvider: FoodDataProviding {
-  func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
-    FoodSearchResponse(
-      foods: [
-        FoodSearchResult(
-          fdcID: 999_001, description: "EGGS, SCRAMBLED", dataType: "Survey (FNDDS)",
-          servingSize: 100, servingSizeUnit: "g", householdServing: "1 serving")
-      ],
-      totalHits: 1,
-      currentPage: 1,
-      totalPages: 1
-    )
-  }
-
-  func foodDetails(fdcID: Int) async throws -> FoodDetails {
-    FoodDetails(
-      fdcID: fdcID,
-      description: "Eggs, scrambled",
-      dataType: "Survey (FNDDS)",
-      servingSize: 100,
-      servingSizeUnit: "g",
-      householdServing: "1 serving",
-      nutrientsPer100Grams: [
-        NutrientAmount(key: .energy, amount: 148),
-        NutrientAmount(key: .protein, amount: 10),
-        NutrientAmount(key: .carbohydrate, amount: 1.6),
-        NutrientAmount(key: .totalFat, amount: 11),
-      ]
-    )
   }
 }

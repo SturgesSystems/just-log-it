@@ -25,7 +25,7 @@ final class ParserEvaluationCorpusTests: XCTestCase {
 
     XCTAssertLessThan(lean.count, Int(Double(production.count) * 0.65))
     XCTAssertTrue(production.contains("fractionOfWhole"))
-    XCTAssertTrue(lean.contains("current message"))
+    XCTAssertTrue(lean.contains("componentNames"))
     _ = FoundationModelsFoodParser()
   }
 

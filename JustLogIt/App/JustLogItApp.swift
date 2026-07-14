@@ -50,6 +50,11 @@ private struct BootstrapRootView: View {
 
   private func boot() {
     let isUITesting = ProcessInfo.processInfo.arguments.contains("-ui-testing")
+    if isUITesting {
+      // UI tests reuse the simulator; start from a clean remembered-food store so
+      // a pick saved by a prior run doesn't auto-select and skip the USDA picker.
+      UserDefaultsRememberedFoodStore().clear()
+    }
     do {
       let built = try ModelContainerFactory.make(isUITesting: isUITesting)
       container = built.container

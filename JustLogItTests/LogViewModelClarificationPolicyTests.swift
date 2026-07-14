@@ -150,12 +150,13 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
 
     model.clarificationAnswer = "scrambled eggs"
     model.submitClarificationAnswer()
-    await waitUntil { model.stage == .choosing }
+    // Single high-confidence hit auto-selects, then asks for a resolvable amount.
+    await waitUntil { model.stage == .clarifying }
 
-    XCTAssertEqual(model.stage, .choosing)
+    XCTAssertEqual(model.stage, .clarifying)
     XCTAssertEqual(model.parsed?.productName, "scrambled eggs")
     XCTAssertFalse(model.parsed?.containsMultipleFoods ?? true)
-    XCTAssertNil(model.activeQuestion)
+    XCTAssertEqual(model.activeQuestion?.code, .missingQuantity)
     XCTAssertNil(model.failureKind)
     let searchCalls = await provider.searchCalls
     XCTAssertEqual(searchCalls, 1)
@@ -216,13 +217,14 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
 
     model.clarificationAnswer = "3 scrambled"
     model.submitClarificationAnswer()
-    await waitUntil { model.stage == .choosing }
+    // Single high-confidence hit auto-selects, then asks for a resolvable amount.
+    await waitUntil { model.stage == .clarifying }
 
     let afterAnswerCalls = await provider.searchCalls
     XCTAssertEqual(afterAnswerCalls, 1)
     XCTAssertEqual(model.parsed?.quantity, 3)
     XCTAssertEqual(model.parsed?.preparation, "scrambled")
-    XCTAssertEqual(model.stage, .choosing)
+    XCTAssertEqual(model.stage, .clarifying)
   }
 
   func testDismissiveClarificationReplyDoesNotSearchUSDA() async {
@@ -297,7 +299,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(model.activeQuestion?.suggestedAnswers, ["eggs", "bacon"])
 
     model.chooseClarificationSuggestion("bacon")
-    await waitUntil { model.stage == .choosing }
+    // Single high-confidence hit auto-selects, then asks for a resolvable amount.
+    await waitUntil { model.stage == .clarifying }
 
     XCTAssertEqual(model.parsed?.productName.lowercased(), "bacon")
     let searchCalls = await provider.searchCalls
@@ -330,7 +333,7 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(searchCalls, 0)
   }
 
-  func testValidSingleFoodSearchesAndReachesChoosing() async {
+  func testValidSingleFoodAutoSelectsAndAsksForQuantity() async {
     let provider = SearchCountingFoodProvider(
       searchResponse: FoodSearchResponse(
         foods: [
@@ -362,13 +365,15 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     model.input = "2 scrambled eggs"
 
     model.submit()
-    await waitUntil { model.stage == .choosing }
+    // A single high-confidence hit auto-selects and skips the picker; the stub
+    // food lacks resolvable serving data, so it asks for a quantity.
+    await waitUntil { model.stage == .clarifying }
 
-    XCTAssertEqual(model.stage, .choosing)
+    XCTAssertEqual(model.stage, .clarifying)
     XCTAssertEqual(model.parsed?.productName, "scrambled eggs")
     XCTAssertFalse(model.manualSearchTerms.isEmpty)
     XCTAssertNil(model.failureKind)
-    XCTAssertNil(model.activeQuestion)
+    XCTAssertEqual(model.activeQuestion?.code, .missingQuantity)
     let validSearchCalls = await provider.searchCalls
     XCTAssertEqual(validSearchCalls, 1)
   }

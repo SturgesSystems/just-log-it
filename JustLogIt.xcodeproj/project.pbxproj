@@ -46,6 +46,17 @@
 		FC02B18AE58A68B4AE901FB9 /* AppConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02B213898318058E4263A83 /* AppConfigurationTests.swift */; };
 		FD831507E8530DDF53E5E03F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D05C6A2EE7E7258B152170E /* SettingsView.swift */; };
 		FFB8BBBA3A6C9A08F1F4058D /* DiskCachedFoodDataProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132931BB16F6D21A6E9894F4 /* DiskCachedFoodDataProviderTests.swift */; };
+		AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */; };
+		CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */; };
+		EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */; };
+		E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */; };
+		B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */; };
+		D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */; };
+		8D8AA9172D6233F27DAB2958 /* LogView+Cards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 805D7D76F3D558032E3CA552 /* LogView+Cards.swift */; };
+		E3D8B17D8A4BDDE0B23D5A17 /* LogView+Composer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */; };
+		A995466BCF1320830B0672AA /* EntriesRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2466B4749E32C46E7CCCAE2 /* EntriesRows.swift */; };
+		20D87C1E4E66582A4D9C79DD /* FoodDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE33805236FF2D045C041309 /* FoodDetailView.swift */; };
+		AD8DFEA300C49C8420F6F8C5 /* EntryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D580977FE627D25CD30EFE /* EntryDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +122,17 @@
 		F7DFF269391395DFB212A3AC /* ParserEvaluationCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParserEvaluationCorpus.swift; sourceTree = "<group>"; };
 		F9221AD51051D16AB3665AD9 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewModel.swift; sourceTree = "<group>"; };
+		AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraImagePicker.swift; sourceTree = "<group>"; };
+		CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComponents.swift; sourceTree = "<group>"; };
+		EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodResultViews.swift; sourceTree = "<group>"; };
+		8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
+		B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTestingDoubles.swift; sourceTree = "<group>"; };
+		4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogViewModel+Internals.swift"; sourceTree = "<group>"; };
+		805D7D76F3D558032E3CA552 /* LogView+Cards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogView+Cards.swift"; sourceTree = "<group>"; };
+		7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogView+Composer.swift"; sourceTree = "<group>"; };
+		E2466B4749E32C46E7CCCAE2 /* EntriesRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EntriesRows.swift"; sourceTree = "<group>"; };
+		EE33805236FF2D045C041309 /* FoodDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FoodDetailView.swift"; sourceTree = "<group>"; };
+		F4D580977FE627D25CD30EFE /* EntryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EntryDetailView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,6 +172,9 @@
 		0EDA74F8450A4E32FE31BE2D /* Entries */ = {
 			isa = PBXGroup;
 			children = (
+				F4D580977FE627D25CD30EFE /* EntryDetailView.swift */,
+				EE33805236FF2D045C041309 /* FoodDetailView.swift */,
+				E2466B4749E32C46E7CCCAE2 /* EntriesRows.swift */,
 				B9094363BB214CFE2ECCBEF8 /* EntriesView.swift */,
 			);
 			path = Entries;
@@ -234,6 +259,14 @@
 		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */,
+				805D7D76F3D558032E3CA552 /* LogView+Cards.swift */,
+				4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */,
+				B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */,
+				8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */,
+				AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */,
+				CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */,
+				EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */,
 				732C04D059CA7E11ECFD1BA2 /* LogView.swift */,
 				FB6113AAF88F1CD2D57E0D93 /* LogViewModel.swift */,
 				8EA8C2AB3EE7773551714E4C /* ManualEntryView.swift */,
@@ -485,6 +518,17 @@
 				8E8D609947A73371AB2317DB /* HealthSyncCoordinator.swift in Sources */,
 				68DF7F931B69266A81066EDE /* JustLogItApp.swift in Sources */,
 				916AB18574E9D1BA032575CF /* LocalizedNumberParser.swift in Sources */,
+				AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */,
+				CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */,
+				EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */,
+				E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */,
+				B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */,
+				D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */,
+				8D8AA9172D6233F27DAB2958 /* LogView+Cards.swift in Sources */,
+				E3D8B17D8A4BDDE0B23D5A17 /* LogView+Composer.swift in Sources */,
+				A995466BCF1320830B0672AA /* EntriesRows.swift in Sources */,
+				20D87C1E4E66582A4D9C79DD /* FoodDetailView.swift in Sources */,
+				AD8DFEA300C49C8420F6F8C5 /* EntryDetailView.swift in Sources */,
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,

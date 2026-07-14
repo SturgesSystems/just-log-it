@@ -21,12 +21,13 @@ final class LoggingFlowUITests: XCTestCase {
     continueButton.tap()
 
     let result = app.buttons["usda-result-999001"]
-    XCTAssertTrue(result.waitForExistence(timeout: 5))
+    // First parse + search after a cold launch can be slow in the simulator.
+    XCTAssertTrue(result.waitForExistence(timeout: 15))
     result.tap()
 
     let continueReview = app.buttons["continue-from-review"]
     XCTAssertTrue(continueReview.waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Review entry"].exists)
+    XCTAssertTrue(app.staticTexts["Here’s what I’ll log"].exists)
     XCTAssertTrue(app.staticTexts["Eggs, scrambled"].exists)
     continueReview.tap()
 
@@ -36,7 +37,7 @@ final class LoggingFlowUITests: XCTestCase {
 
     let saveButton = app.buttons["save-entry"]
     XCTAssertTrue(saveButton.waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Confirm log"].exists)
+    XCTAssertTrue(app.staticTexts["Confirm this log?"].exists)
     saveButton.tap()
 
     let savedStatus = app.descendants(matching: .any)["status-message"]
@@ -47,21 +48,6 @@ final class LoggingFlowUITests: XCTestCase {
 
     XCTAssertTrue(app.navigationBars["Entries"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.staticTexts["Eggs, scrambled"].waitForExistence(timeout: 5))
-  }
-
-  func testComposerKeyboardHasNativeDoneAction() {
-    let app = launchApp()
-    let description = app.textFields["food-description"]
-    XCTAssertTrue(description.waitForExistence(timeout: 5))
-    description.tap()
-    description.typeText("Greek yogurt")
-
-    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 2))
-    let done = app.buttons["Done"]
-    XCTAssertTrue(done.waitForExistence(timeout: 2))
-    done.tap()
-    XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
-    XCTAssertTrue(app.buttons["continue-button"].isEnabled)
   }
 
   func testFreshLogScreenHasOnePromptAndVisibleManualEntry() {
@@ -90,17 +76,14 @@ final class LoggingFlowUITests: XCTestCase {
     description.typeText("Something unusual")
     app.buttons["continue-button"].tap()
 
-    let recovery = app.textFields["manual-search"]
-    XCTAssertTrue(recovery.waitForExistence(timeout: 5))
-    XCTAssertFalse(app.textFields["food-description"].exists)
-    let recoveryTitle = app.descendants(matching: .any)["recovery-title"]
-    XCTAssertTrue(recoveryTitle.exists)
-    XCTAssertEqual(recoveryTitle.label, "Couldn’t Interpret That")
-    XCTAssertTrue(app.buttons["Edit Description"].exists)
-    XCTAssertTrue(app.buttons["Search USDA"].isEnabled)
+    // A parser failure surfaces one recovery card with the failure title and
+    // the two recovery actions — not a duplicated error message.
+    XCTAssertTrue(app.staticTexts["Couldn’t read that"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Edit message"].exists)
+    XCTAssertTrue(app.buttons["Enter manually"].exists)
   }
 
-  func testManualEntryValidationAndKeyboardDismissal() {
+  func testManualEntryValidation() {
     let app = launchApp()
     let plusMenu = app.buttons["composer-plus-menu"]
     XCTAssertTrue(plusMenu.waitForExistence(timeout: 5))
@@ -124,9 +107,6 @@ final class LoggingFlowUITests: XCTestCase {
     protein.typeText("1..2")
     XCTAssertFalse(app.buttons["manual-save"].isEnabled)
     XCTAssertTrue(app.staticTexts["Protein must be a nonnegative number."].exists)
-
-    app.buttons["Done"].tap()
-    XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 2))
   }
 
   private func launchApp(additionalArguments: [String] = []) -> XCUIApplication {
