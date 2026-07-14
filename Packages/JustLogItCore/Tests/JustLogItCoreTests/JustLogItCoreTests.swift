@@ -669,6 +669,46 @@ import Testing
   #expect(resolution.consumedGrams == 158)
 }
 
+@Test func bowlsResolveAsMultiplesOfTheGramServing() {
+  // "2 bowls" of a food whose household serving is a volume the bowl can't map
+  // to: falls through to the meal-vessel rule (N × listed gram serving).
+  let parsed = ParsedFoodRequest(productName: "cereal", quantity: 2, unit: "bowls")
+  let food = FoodDetails(
+    fdcID: 8,
+    description: "Cereal, corn flakes",
+    dataType: "Branded",
+    servingSize: 40,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 357)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 2 bowls → 80 g, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 80)
+}
+
+@Test func cupOfStapleUsesCulinaryDensityWhenNoServingInfo() {
+  // No serving size and no volume household serving, but a known staple: use
+  // the culinary grams/cup and mark the result approximate.
+  let parsed = ParsedFoodRequest(productName: "rice", quantity: 1, unit: "cup")
+  let food = FoodDetails(
+    fdcID: 10,
+    description: "White rice, cooked",
+    dataType: "Foundation",
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 130)]
+  )
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected 1 cup of rice → ~158 g, got \(outcome)")
+    return
+  }
+  #expect(abs(resolution.consumedGrams! - 158) < 0.001)
+  #expect(resolution.displayText.contains("approx"))
+}
+
 @Test func unitConversionMassIsExact() {
   #expect(abs((UnitConversion.toGrams(quantity: 1, unit: "oz") ?? 0) - 28.349_523_125) < 1e-9)
   #expect(abs((UnitConversion.convert(quantity: 1000, from: "g", to: "kg") ?? 0) - 1) < 1e-12)
