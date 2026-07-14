@@ -285,7 +285,9 @@ struct SettingsView: View {
   private func clearCache() {
     let fileManager = FileManager.default
     let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-    guard let directory = base?.appending(path: "JustLogItFoodData", directoryHint: .isDirectory)
+    guard
+      let directory = base?.appending(
+        path: DiskCachedFoodDataProvider.cacheDirectoryName, directoryHint: .isDirectory)
     else {
       cacheResultMessage = "The food cache could not be located."
       return

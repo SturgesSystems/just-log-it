@@ -177,6 +177,9 @@ private actor USDAFoodDataProvider: FoodDataProviding {
 }
 
 actor DiskCachedFoodDataProvider: FoodDataProviding {
+  /// Cache subdirectory name — shared so Settings' "Clear cache" targets the same place.
+  static let cacheDirectoryName = "JustLogItFoodData"
+
   private struct Envelope<Value: Codable & Sendable>: Codable, Sendable {
     let value: Value
     let expiresAt: Date
@@ -204,7 +207,8 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
       let base =
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
         ?? FileManager.default.temporaryDirectory
-      self.directory = base.appending(path: "JustLogItFoodData", directoryHint: .isDirectory)
+      self.directory = base.appending(
+        path: Self.cacheDirectoryName, directoryHint: .isDirectory)
     }
   }
 
