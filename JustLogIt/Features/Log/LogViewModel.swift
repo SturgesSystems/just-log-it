@@ -564,6 +564,9 @@ final class LogViewModel: ObservableObject {
   func cancel() {
     invalidateOperation()
     clearInterpretationClarification()
+    // Abandon any in-progress multi-food assembly so a later log doesn't merge
+    // into it.
+    if compositeSessionActive { clearCompositeSession() }
     stage = .idle
     message = nil
     failureKind = nil

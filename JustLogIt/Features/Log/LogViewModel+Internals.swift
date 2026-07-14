@@ -86,6 +86,8 @@ extension LogViewModel {
     message = nil
     failureKind = nil
     clearInterpretationClarification()
+    // A fresh interpretation must not inherit an abandoned multi-food session.
+    if compositeSessionActive { clearCompositeSession() }
     results = []
     selectedResult = nil
     details = nil
@@ -161,6 +163,8 @@ extension LogViewModel {
     nutrients = []
     whenEatenAnswer = ""
     consumedAt = .now
+    // A fresh interpretation must not inherit an abandoned multi-food session.
+    if compositeSessionActive { clearCompositeSession() }
 
     do {
       let proposed = try await imageProposer.propose(imageData: data, caption: caption)

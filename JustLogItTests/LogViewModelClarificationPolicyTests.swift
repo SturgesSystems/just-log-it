@@ -378,6 +378,33 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(validSearchCalls, 1)
   }
 
+  func testCancelDuringCompositeAssemblyClearsTheSession() async {
+    let provider = SearchCountingFoodProvider(
+      searchResponse: FoodSearchResponse(
+        foods: [
+          FoodSearchResult(fdcID: 5, description: "Eggs, scrambled", dataType: "Survey (FNDDS)")
+        ],
+        totalHits: 1, currentPage: 1, totalPages: 1))
+    let model = LogViewModel(
+      parser: ScriptedFoodParser(results: [
+        ParsedFoodRequest(
+          productName: "eggs and bacon", searchTerms: "eggs and bacon",
+          containsMultipleFoods: true, componentNames: ["eggs", "bacon"])
+      ]),
+      provider: provider)
+    model.input = "eggs and bacon"
+    model.submit()
+    await waitUntil { model.isBuildingComposite }
+
+    model.cancel()
+
+    // Cancelling must abandon the composite so a later log doesn't merge into it.
+    XCTAssertFalse(model.isBuildingComposite)
+    XCTAssertTrue(model.compositeComponents.isEmpty)
+    XCTAssertTrue(model.pendingCompositeNames.isEmpty)
+    XCTAssertEqual(model.stage, .idle)
+  }
+
   private func waitUntil(
     timeout: Duration = .seconds(1),
     condition: @escaping @MainActor () -> Bool
