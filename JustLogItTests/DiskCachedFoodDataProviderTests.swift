@@ -157,6 +157,26 @@ final class DiskCachedFoodDataProviderTests: XCTestCase {
     XCTAssertEqual(calls, 1)
   }
 
+  func testCacheIsBoundedByMaxEntries() async throws {
+    let upstream = FakeUpstream(details: sampleDetails(fdcID: 1, description: "food"))
+    let provider = DiskCachedFoodDataProvider(
+      upstream: upstream,
+      directory: directory,
+      now: { [fixedNow] in fixedNow! },
+      maxEntries: 3
+    )
+
+    // Eight distinct fdcIDs → eight distinct cache files, pruned to the cap.
+    for id in 1...8 {
+      _ = try await provider.foodDetails(fdcID: id)
+    }
+
+    let files = try FileManager.default.contentsOfDirectory(
+      at: directory, includingPropertiesForKeys: nil)
+    XCTAssertGreaterThan(files.count, 0)
+    XCTAssertLessThanOrEqual(files.count, 3, "Disk cache must stay bounded by maxEntries")
+  }
+
   // MARK: - Helpers
 
   private func makeProvider(upstream: FakeUpstream) -> DiskCachedFoodDataProvider {

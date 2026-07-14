@@ -185,16 +185,19 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
   private let upstream: any FoodDataProviding
   private let directory: URL
   private let now: @Sendable () -> Date
+  private let maxEntries: Int
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
   init(
     upstream: any FoodDataProviding,
     directory: URL? = nil,
-    now: @escaping @Sendable () -> Date = { .now }
+    now: @escaping @Sendable () -> Date = { .now },
+    maxEntries: Int = 500
   ) {
     self.upstream = upstream
     self.now = now
+    self.maxEntries = max(1, maxEntries)
     if let directory {
       self.directory = directory
     } else {
@@ -238,8 +241,30 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let envelope = Envelope(value: value, expiresAt: now().addingTimeInterval(ttl))
       try encoder.encode(envelope).write(to: url, options: .atomic)
+      pruneIfNeeded()
     } catch {
       // Cache failure must never prevent a food lookup.
+    }
+  }
+
+  /// Bounds on-disk growth: keep at most `maxEntries` files, evicting the
+  /// least-recently-modified ones. Cheap common case — one directory listing;
+  /// only reads modification dates when actually over the cap.
+  private func pruneIfNeeded() {
+    guard
+      let urls = try? FileManager.default.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: [.contentModificationDateKey],
+        options: [.skipsHiddenFiles]),
+      urls.count > maxEntries
+    else { return }
+
+    let modified: (URL) -> Date = {
+      (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+        ?? .distantPast
+    }
+    let oldestFirst = urls.sorted { modified($0) < modified($1) }
+    for url in oldestFirst.prefix(urls.count - maxEntries) {
+      try? FileManager.default.removeItem(at: url)
     }
   }
 
