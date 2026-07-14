@@ -52,6 +52,8 @@
 		E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */; };
 		B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */; };
 		D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */; };
+		8D8AA9172D6233F27DAB2958 /* LogView+Cards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 805D7D76F3D558032E3CA552 /* LogView+Cards.swift */; };
+		E3D8B17D8A4BDDE0B23D5A17 /* LogView+Composer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -123,6 +125,8 @@
 		8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
 		B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTestingDoubles.swift; sourceTree = "<group>"; };
 		4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogViewModel+Internals.swift"; sourceTree = "<group>"; };
+		805D7D76F3D558032E3CA552 /* LogView+Cards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogView+Cards.swift"; sourceTree = "<group>"; };
+		7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogView+Composer.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -246,6 +250,8 @@
 		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				7200DD4DB7ADAAB44F4231D1 /* LogView+Composer.swift */,
+				805D7D76F3D558032E3CA552 /* LogView+Cards.swift */,
 				4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */,
 				B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */,
 				8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */,
@@ -509,6 +515,8 @@
 				E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */,
 				B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */,
 				D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */,
+				8D8AA9172D6233F27DAB2958 /* LogView+Cards.swift in Sources */,
+				E3D8B17D8A4BDDE0B23D5A17 /* LogView+Composer.swift in Sources */,
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,
