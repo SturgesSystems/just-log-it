@@ -60,6 +60,8 @@ final class LogViewModelConcurrencyTests: XCTestCase {
       model.message,
       "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
     )
+    // The typed text carries into manual search so recovery isn't a blank field.
+    XCTAssertEqual(model.manualSearchTerms, "two large scrambled eggs")
   }
 
   func testSearchFailureHasSearchContext() async {

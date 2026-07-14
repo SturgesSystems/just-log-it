@@ -132,6 +132,9 @@ extension LogViewModel {
       return
     } catch {
       guard isCurrentOperation(generation) else { return }
+      // Preserve the user's text so the manual-search / recovery path isn't blank
+      // when the on-device model is unavailable or errors out.
+      manualSearchTerms = evidenceText
       let failureMessage =
         (error as? LocalizedError)?.errorDescription
         ?? "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
