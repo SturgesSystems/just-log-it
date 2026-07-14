@@ -126,18 +126,13 @@ final class LogViewModel: ObservableObject {
     }
     if skipNextUserTranscriptAppend {
       skipNextUserTranscriptAppend = false
-    } else if stage == .idle || stage == .completed || transcript.isEmpty {
+    } else {
       if stage == .completed {
-        // New log after save: clear prior transcript first.
+        // New log after save: clear the prior transcript first.
         transcript = []
         lastSavedEntryID = nil
         lastSavedRecognizedFoodID = nil
       }
-      appendUserTurn(text)
-    } else if stage == .failed {
-      // Replacing the description after failure — treat as a fresh user turn.
-      appendUserTurn(text)
-    } else {
       appendUserTurn(text)
     }
     // Chat feel: message lives in the transcript; composer returns to empty.
