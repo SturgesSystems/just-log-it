@@ -49,6 +49,8 @@
 		AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */; };
 		CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */; };
 		EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */; };
+		E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */; };
+		B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -117,6 +119,8 @@
 		AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraImagePicker.swift; sourceTree = "<group>"; };
 		CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatComponents.swift; sourceTree = "<group>"; };
 		EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodResultViews.swift; sourceTree = "<group>"; };
+		8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
+		B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTestingDoubles.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -240,6 +244,8 @@
 		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */,
+				8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */,
 				AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */,
 				CCCC3333CCCC3333CCCC3333 /* ChatComponents.swift */,
 				EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */,
@@ -497,6 +503,8 @@
 				AAAA1111AAAA1111AAAA1112 /* CameraImagePicker.swift in Sources */,
 				CCCC3333CCCC3333CCCC3334 /* ChatComponents.swift in Sources */,
 				EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */,
+				E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */,
+				B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */,
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,

@@ -3,37 +3,6 @@ import JustLogItCore
 import SwiftData
 import SwiftUI
 
-/// A single turn in the logging conversation transcript.
-enum ConversationTurn: Identifiable, Equatable {
-  /// User text, optionally with a photo (bytes stay on-device for the session only).
-  case user(id: UUID, text: String, imageData: Data?)
-  case system(id: UUID, text: String)
-
-  var id: UUID {
-    switch self {
-    case .user(let id, _, _), .system(let id, _):
-      return id
-    }
-  }
-
-  var isUser: Bool {
-    if case .user = self { return true }
-    return false
-  }
-
-  var text: String {
-    switch self {
-    case .user(_, let text, _), .system(_, let text):
-      return text
-    }
-  }
-
-  var imageData: Data? {
-    if case .user(_, _, let data) = self { return data }
-    return nil
-  }
-}
-
 @MainActor
 final class LogViewModel: ObservableObject {
   enum Stage: Equatable {
@@ -1205,36 +1174,4 @@ final class LogViewModel: ObservableObject {
     rememberedFoods.save(catalog)
   }
 
-}
-
-private struct MockFoodDataProvider: FoodDataProviding {
-  func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
-    FoodSearchResponse(
-      foods: [
-        FoodSearchResult(
-          fdcID: 999_001, description: "EGGS, SCRAMBLED", dataType: "Survey (FNDDS)",
-          servingSize: 100, servingSizeUnit: "g", householdServing: "1 serving")
-      ],
-      totalHits: 1,
-      currentPage: 1,
-      totalPages: 1
-    )
-  }
-
-  func foodDetails(fdcID: Int) async throws -> FoodDetails {
-    FoodDetails(
-      fdcID: fdcID,
-      description: "Eggs, scrambled",
-      dataType: "Survey (FNDDS)",
-      servingSize: 100,
-      servingSizeUnit: "g",
-      householdServing: "1 serving",
-      nutrientsPer100Grams: [
-        NutrientAmount(key: .energy, amount: 148),
-        NutrientAmount(key: .protein, amount: 10),
-        NutrientAmount(key: .carbohydrate, amount: 1.6),
-        NutrientAmount(key: .totalFat, amount: 11),
-      ]
-    )
-  }
 }

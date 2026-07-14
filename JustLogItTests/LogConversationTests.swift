@@ -136,13 +136,13 @@ final class LogConversationTests: XCTestCase {
       parser: ConversationFoodParser(),
       provider: ConversationFoodProvider()
     )
-    model.input = "two eggs"
+    model.input = "scrambled eggs"
     model.submit()
     await waitUntil { model.stage == .reviewing }
 
     let users = model.transcript.filter(\.isUser)
     XCTAssertEqual(users.count, 1)
-    XCTAssertEqual(users.first?.text, "two eggs")
+    XCTAssertEqual(users.first?.text, "scrambled eggs")
     // Auto-select echoes a "Using …" assistant turn into the transcript.
     XCTAssertTrue(model.transcript.contains(where: { !$0.isUser }))
   }
@@ -154,7 +154,7 @@ final class LogConversationTests: XCTestCase {
       parser: ConversationFoodParser(),
       provider: ConversationFoodProvider()
     )
-    model.input = "two eggs"
+    model.input = "scrambled eggs"
     model.submit()
     // A single high-confidence hit auto-selects and resolves straight to review.
     await waitUntil { model.stage == .reviewing }
