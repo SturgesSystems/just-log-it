@@ -42,10 +42,12 @@ public enum CompositeComponentRequest {
     let quantityText: String
   }
 
+  private static let leadingCountRegex = try? NSRegularExpression(
+    pattern: #"^(\d+(?:[.,]\d+)?)\s+(.+)$"#)
+
   /// "1 Big Mac", "2 large eggs", "1.5 cups rice" — not "Big Mac".
   private static func leadingCount(in text: String) -> LeadingCount? {
-    let pattern = #"^(\d+(?:[.,]\d+)?)\s+(.+)$"#
-    guard let regex = try? NSRegularExpression(pattern: pattern),
+    guard let regex = leadingCountRegex,
       let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
       let qtyRange = Range(match.range(at: 1), in: text),
       let restRange = Range(match.range(at: 2), in: text)

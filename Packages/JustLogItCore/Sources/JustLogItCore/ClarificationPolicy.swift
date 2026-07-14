@@ -401,9 +401,16 @@ public struct ClarificationPolicy: Sendable {
     }
   }
 
+  // Constant patterns, compiled once rather than on every clarification answer.
+  private static let quantityPrefixRegex = try? NSRegularExpression(
+    pattern: #"^[\s]*([0-9]+(?:\.[0-9]+)?)"#)
+  private static let trailingUnitRegex = try? NSRegularExpression(
+    pattern: #"^[0-9]+(?:\.[0-9]+)?\s+([A-Za-z]+)\s*$"#)
+  private static let trailingDetailRegex = try? NSRegularExpression(
+    pattern: #"^[0-9]+(?:\.[0-9]+)?\s+(.+)$"#)
+
   private static func parsePositiveQuantity(_ text: String) -> Double? {
-    let pattern = #"^[\s]*([0-9]+(?:\.[0-9]+)?)"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    guard let regex = quantityPrefixRegex else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     guard let match = regex.firstMatch(in: text, range: range),
       let numberRange = Range(match.range(at: 1), in: text),
@@ -414,8 +421,7 @@ public struct ClarificationPolicy: Sendable {
   }
 
   private static func parseTrailingUnit(_ text: String) -> String? {
-    let pattern = #"^[0-9]+(?:\.[0-9]+)?\s+([A-Za-z]+)\s*$"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    guard let regex = trailingUnitRegex else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     guard let match = regex.firstMatch(in: text, range: range),
       let unitRange = Range(match.range(at: 1), in: text)
@@ -426,8 +432,7 @@ public struct ClarificationPolicy: Sendable {
   }
 
   private static func trailingDetail(afterQuantityIn text: String) -> String? {
-    let pattern = #"^[0-9]+(?:\.[0-9]+)?\s+(.+)$"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+    guard let regex = trailingDetailRegex else { return nil }
     let range = NSRange(text.startIndex..., in: text)
     guard let match = regex.firstMatch(in: text, range: range),
       let detailRange = Range(match.range(at: 1), in: text)

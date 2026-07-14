@@ -67,24 +67,14 @@ public enum RelativeTimeParser: Sendable {
     return ParseResult(date: now, wasParsed: false)
   }
 
-  /// Matches "N unit(s) ago" or "N unit(s)".
+  /// Matches "N unit(s) ago" or "N unit(s)" where N is a non-negative integer.
   private static func matchCount(in lower: String, singular: String, plural: String) -> Int? {
-    let patterns = [
-      "^(\\d+)\\s+\(plural)\\s+ago$",
-      "^(\\d+)\\s+\(singular)\\s+ago$",
-      "^(\\d+)\\s+\(plural)$",
-      "^(\\d+)\\s+\(singular)$",
-    ]
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-      let range = NSRange(lower.startIndex..., in: lower)
-      guard let match = regex.firstMatch(in: lower, range: range),
-        match.numberOfRanges >= 2,
-        let countRange = Range(match.range(at: 1), in: lower),
-        let value = Int(lower[countRange]), value >= 0
-      else { continue }
-      return value
-    }
-    return nil
+    var parts = lower.split(whereSeparator: \.isWhitespace).map(String.init)
+    if parts.last == "ago" { parts.removeLast() }
+    guard parts.count == 2, parts[1] == singular || parts[1] == plural else { return nil }
+    let digits = parts[0]
+    guard digits.allSatisfy({ $0.isASCII && $0.isNumber }), let value = Int(digits), value >= 0
+    else { return nil }
+    return value
   }
 }

@@ -346,14 +346,16 @@ final class LogViewModel: ObservableObject {
     apply(resolver.resolve(req, against: details))
   }
 
+  private static let quantitySuggestionRegex = try? NSRegularExpression(
+    pattern: #"^\s*([0-9]+(?:[.,][0-9]+)?)\s*([A-Za-z].*)?$"#)
+
   /// Applies a quantity suggestion or freeform text such as "1 serving" / "100 g" / "1 cup".
   func applyQuantitySuggestion(_ suggestion: String) {
     let trimmed = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
 
     // "1 serving", "100 g", "1.5 cup"
-    let pattern = #"^\s*([0-9]+(?:[.,][0-9]+)?)\s*([A-Za-z].*)?$"#
-    if let regex = try? NSRegularExpression(pattern: pattern),
+    if let regex = Self.quantitySuggestionRegex,
       let match = regex.firstMatch(
         in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
       let amountRange = Range(match.range(at: 1), in: trimmed)

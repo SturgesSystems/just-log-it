@@ -35,6 +35,23 @@ import Testing
   #expect(result.date == expected)
 }
 
+@Test func relativeTimeParserMinutesDaysAndBareCounts() {
+  let now = Date(timeIntervalSince1970: 1_700_000_000)
+  let cal = Calendar(identifier: .gregorian)
+  #expect(
+    RelativeTimeParser.parse("30 minutes ago", relativeTo: now, calendar: cal).date
+      == cal.date(byAdding: .minute, value: -30, to: now))
+  #expect(
+    RelativeTimeParser.parse("3 days ago", relativeTo: now, calendar: cal).date
+      == cal.date(byAdding: .day, value: -3, to: now))
+  // "N unit" without "ago" still parses; extra spacing is tolerated.
+  #expect(
+    RelativeTimeParser.parse("2   hours", relativeTo: now, calendar: cal).date
+      == cal.date(byAdding: .hour, value: -2, to: now))
+  // Non-integer counts are not recognized (falls back to now).
+  #expect(!RelativeTimeParser.parse("2.5 hours ago", relativeTo: now).wasParsed)
+}
+
 @Test func relativeTimeParserYesterday() {
   let now = Date(timeIntervalSince1970: 1_700_000_000)
   let calendar = Calendar(identifier: .gregorian)
