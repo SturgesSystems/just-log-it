@@ -51,6 +51,7 @@
 		EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */; };
 		E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */; };
 		B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */; };
+		D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -121,6 +122,7 @@
 		EEEE5555EEEE5555EEEE5555 /* FoodResultViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoodResultViews.swift; sourceTree = "<group>"; };
 		8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
 		B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogTestingDoubles.swift; sourceTree = "<group>"; };
+		4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogViewModel+Internals.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +246,7 @@
 		BC7C56AFB5D3A05A62CFEA8E /* Log */ = {
 			isa = PBXGroup;
 			children = (
+				4E41DBB01C6E5ADD91B18D71 /* LogViewModel+Internals.swift */,
 				B092EE5739F2C76D91135046 /* LogTestingDoubles.swift */,
 				8AB0CAF931DAA3CE15898F63 /* ConversationTurn.swift */,
 				AAAA1111AAAA1111AAAA1111 /* CameraImagePicker.swift */,
@@ -505,6 +508,7 @@
 				EEEE5555EEEE5555EEEE5556 /* FoodResultViews.swift in Sources */,
 				E6726CED6341F73A47FFA2E8 /* ConversationTurn.swift in Sources */,
 				B6D715B6AFDA87148EE573BA /* LogTestingDoubles.swift in Sources */,
+				D52D4B326B6B1C1DCF4ECFC4 /* LogViewModel+Internals.swift in Sources */,
 				DE729E4DC6B4089659990870 /* LogView.swift in Sources */,
 				C89AB5742C3FCAD3D5D1973D /* LogViewModel.swift in Sources */,
 				5FA3916F946A5B6EE39C322C /* ManualEntryView.swift in Sources */,
