@@ -25,21 +25,18 @@ struct ChatUserBubble: View {
   var isEditing: Bool = false
   var onEdit: (() -> Void)?
 
+  @State private var decodedImage: UIImage?
+
   private var trimmedText: String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  private var uiImage: UIImage? {
-    guard let imageData else { return nil }
-    return UIImage(data: imageData)
   }
 
   var body: some View {
     HStack {
       Spacer(minLength: 56)
       VStack(alignment: .trailing, spacing: 6) {
-        if let uiImage {
-          Image(uiImage: uiImage)
+        if let decodedImage {
+          Image(uiImage: decodedImage)
             .resizable()
             .scaledToFill()
             .frame(maxWidth: 220, maxHeight: 280)
@@ -70,6 +67,11 @@ struct ChatUserBubble: View {
         }
       }
     }
+    // Decode the photo once per image, off the render path — not on every
+    // transcript re-render (a session photo can be several megabytes).
+    .task(id: imageData) {
+      decodedImage = imageData.flatMap { UIImage(data: $0) }
+    }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilityLabelText)
     .accessibilityHint(onEdit == nil ? "" : "Edits this message and restarts from here")
@@ -77,7 +79,7 @@ struct ChatUserBubble: View {
   }
 
   private var accessibilityLabelText: String {
-    if uiImage != nil {
+    if imageData != nil {
       return trimmedText.isEmpty ? "You shared a photo" : "You shared a photo: \(trimmedText)"
     }
     return "You said, \(trimmedText)"
