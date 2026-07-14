@@ -276,8 +276,14 @@ extension LogView {
         }
 
         if model.compositeComponents.isEmpty {
-          Button("Choose a different food") {
-            model.searchManually()
+          HStack(spacing: 16) {
+            Button("Adjust amount") {
+              model.adjustQuantity()
+            }
+            .accessibilityIdentifier("adjust-amount")
+            Button("Choose a different food") {
+              model.searchManually()
+            }
           }
           .font(.subheadline)
         }

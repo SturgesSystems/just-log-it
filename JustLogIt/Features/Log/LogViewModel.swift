@@ -374,6 +374,14 @@ final class LogViewModel: ObservableObject {
   }
 
   /// Advances from nutrition review: skip “when?” when timing was already clear in the log text.
+  /// From review, re-enter just the amount for the same food — no re-search.
+  func adjustQuantity() {
+    guard stage == .reviewing, compositeComponents.isEmpty, let details else { return }
+    clarificationServings = ""
+    clarificationGrams = ""
+    presentQuantityClarification(explanation: "How much did you have?", food: details)
+  }
+
   func continueFromReview() {
     guard stage == .reviewing else { return }
     message = nil

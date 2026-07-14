@@ -147,6 +147,19 @@ final class LogConversationTests: XCTestCase {
     XCTAssertTrue(model.transcript.contains(where: { !$0.isUser }))
   }
 
+  func testAdjustQuantityFromReviewReentersAmountWithoutResearching() async {
+    let model = await advanceToReviewing()
+    XCTAssertEqual(model.stage, .reviewing)
+    let food = model.details
+
+    model.adjustQuantity()
+
+    XCTAssertEqual(model.stage, .clarifying)
+    XCTAssertEqual(model.activeQuestion?.code, .missingQuantity)
+    // Same food is kept — this re-enters the amount, it does not re-search.
+    XCTAssertEqual(model.details?.fdcID, food?.fdcID)
+  }
+
   // MARK: - Helpers
 
   private func advanceToReviewing() async -> LogViewModel {
