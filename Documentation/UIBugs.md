@@ -396,6 +396,187 @@ Verification:
 - Verified on: Xcode 27 beta / iOS 27 test target (automated only)
 - Result: Automated tests pass; manual original reproduction pending
 
+### UI-012 — Choose a different food immediately re-selects the remembered match
+
+- Severity: S1 — Major
+- Status: Ready to verify
+- Owner: USDA selection sub-agent
+- Found in: `34b9d02`, Xcode 27 beta / iOS 27, iPhone 17 Pro Simulator
+- Area: Log / USDA
+- Evidence: Live Computer Use walkthrough
+
+Reproduction:
+
+1. Log a food whose USDA match has been remembered from a prior confirmation.
+2. Reach the nutrition review card for that automatically selected match.
+3. Tap **Choose a different food**.
+4. Observe the brief thinking state and the next card.
+
+Expected:
+
+The app presents the ranked USDA match list so the person can choose an alternative. The remembered match may remain ranked first, but an explicit request to choose must not auto-select anything.
+
+Actual:
+
+The app performed another USDA search, applied remembered-match auto-selection again, and immediately returned to review with the same food. No alternative could be chosen.
+
+Notes:
+
+Remembered matches now influence ordering only; they never silently select nutrition data. Manual and choose-different searches also bypass high-confidence auto-selection while retaining relevance ranking. A focused view-model regression test covers the remembered-food path.
+
+Verification:
+
+- Fix commit: Working tree after `34b9d02`
+- Verified by: Focused app unit test
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Dedicated remembered-food regression passes; manual original reproduction pending
+
+### UI-013 — Custom meal time submits as “Just now”
+
+- Severity: S1 — Major
+- Status: Ready to verify
+- Owner: Meal-time sub-agent
+- Found in: `34b9d02`, Xcode 27 beta / iOS 27, iPhone 17 Pro Simulator
+- Area: Log / Accessibility
+- Evidence: Live Computer Use walkthrough
+
+Reproduction:
+
+1. Log a food and continue from nutrition review to **When did you eat this?**.
+2. Set the custom time field to `2 hours ago`.
+3. Tap **Send**.
+4. Observe the user turn and confirmation time.
+
+Expected:
+
+The transcript says `2 hours ago`, and the pending entry's consumed time is approximately two hours in the past.
+
+Actual:
+
+The transcript said `Just now`, and the pending entry used the current time. The custom field's accessibility value had not reached its SwiftUI binding before the button action read it.
+
+Notes:
+
+The composer now resigns focus and waits one main-actor turn before submitting, allowing accessibility, dictation, and IME edits to commit. Focused model and UI regressions cover the custom phrase and resulting confirmation state.
+
+Verification:
+
+- Fix commit: Working tree after `34b9d02`
+- Verified by: Focused app unit and UI regression tests
+- Verified on: Xcode 27 beta / iOS 27 test targets (automated only)
+- Result: Both focused regressions pass; manual original reproduction pending
+
+### UI-014 — Explicit egg quantity can collapse to one unknown USDA serving
+
+- Severity: S1 — Major
+- Status: Ready to verify
+- Owner: Quantity/USDA portions sub-agent
+- Found in: Working tree after `34b9d02`, source and interaction review
+- Area: Log / Foundation Models / USDA
+- Evidence: User report for `Two large scrambled eggs`; deterministic regressions added
+
+Reproduction:
+
+1. Enter `Two large scrambled eggs` on the Log screen.
+2. Choose the USDA scrambled-egg result.
+3. Inspect the resolved amount and nutrition.
+
+Expected:
+
+The explicit count survives interpretation, and the resolver uses USDA's matching `large egg` portion row. If the available portions do not identify a safe size, the app asks rather than guessing.
+
+Actual:
+
+If the on-device model omitted the quantity, the app could default to `1 serving`. USDA details also exposed several portion rows while the app retained only one preferred serving, so `large egg` could be ignored in favor of an unrelated or unspecified amount.
+
+Notes:
+
+The app now conservatively recovers simple explicit quantities from the original text, refuses the one-serving default when unrecovered amount evidence remains, preserves all USDA portion rows, and matches count, unit, and size qualifiers. Ambiguous materially different sizes require clarification. Core, app-integration, and parser-evaluation regressions cover this path.
+
+Verification:
+
+- Fix commit: Working tree
+- Verified by: Core and app integration tests
+- Verified on: Xcode 27 beta / iOS 27 test target (automated only)
+- Result: Automated regressions pass; original on-device-model walkthrough pending
+
+### UI-015 — Foundation Models parsing fails when the selected model lacks reasoning
+
+- Severity: S1 — Major
+- Status: Ready to verify
+- Owner: Foundation Models parser sub-agent
+- Found in: Working tree, macOS 27 LoggingEval production/general run
+- Area: Log / Foundation Models
+- Evidence: Five evaluator parses failed with `The selected model does not support reasoning`
+
+Reproduction:
+
+1. Run LoggingEval with the real system model using the production prompt and general use case.
+2. Parse any valid food description.
+3. Observe the generation failure before structured food output is returned.
+
+Expected:
+
+The parser requests model features supported by the selected model and returns a
+structured food interpretation.
+
+Actual:
+
+The app and evaluator unconditionally requested `.light` reasoning. The current
+general system model does not advertise reasoning support, so every request failed.
+
+Notes:
+
+Both parsers now query `model.capabilities.contains(.reasoning)`. They request
+`.light` only for a capable model and omit the reasoning level otherwise. The
+evaluator continues recording response usage and reasoning-token metrics. A
+deterministic policy test and evaluator source-parity assertions cover the gate.
+
+Verification:
+
+- Fix commit: Working tree
+- Verified by: Deterministic app unit test and evaluator parity/build tests
+- Verified on: Xcode 27 beta SDK / macOS 27 build
+- Result: Automated compatibility gate passes; original real-model reproduction pending
+
+### UI-016 — Manual Entry emits an invalid-frame warning during keyboard focus
+
+- Severity: S3 — Minor
+- Status: Open
+- Owner: Unassigned
+- Found in: Working tree, Xcode 27 beta / iOS 27, iPhone 17 Pro Simulator
+- Area: Manual Entry / Keyboard
+- Evidence: `/tmp/justlogit-hybrid-steeled-ui-final.log`
+
+Reproduction:
+
+1. Open **Manual Entry** on the iPhone 17 Pro Simulator.
+2. Focus the food-name field, then move through the numeric fields with the keyboard visible.
+3. Inspect the UI-test diagnostics.
+
+Expected:
+
+The form lays out and scrolls without geometry diagnostics.
+
+Actual:
+
+XCTest reports `Invalid frame dimension (negative or non-finite).` while the form is focusing or
+scrolling a field. The complete interaction still succeeds, and no visual or hit-testing failure has
+been reproduced. The warning occurs in both the normal validation and forced-volatile-store paths.
+
+Notes:
+
+The app contains no explicit negative frame calculation in `ManualEntryView`; this may be an iOS 27
+SwiftUI Form/keyboard-toolbar or XCTest scrolling issue. Keep it open until an Instruments/layout
+trace or a later SDK confirms the source. Do not suppress the diagnostic without understanding it.
+
+Verification:
+
+- Fix commit:
+- Verified by: Complete 19-case UI suite (behavior passes; warning remains)
+- Verified on: Xcode 27 beta / iOS 27, iPhone 17 Pro Simulator
+- Result: User flow passes; diagnostic remains open
+
 ## Bug template
 
 Copy this block beneath **Open bugs**. Give each bug a stable sequential ID such as `UI-001`; never reuse an ID.
@@ -449,3 +630,6 @@ Add one row for every complete or aborted run of [`ManualAcceptanceTest.md`](Man
 | Date | Commit | iOS / device | Result | Bugs opened | Notes |
 | --- | --- | --- | --- | --- | --- |
 | 2026-07-12 | `bc9d067` | iOS 27 / iPhone 17 Pro Simulator | Fail | UI-001–UI-007 | Partial user walkthrough and source audit; not a complete acceptance run |
+| 2026-07-16 | Working tree | iOS 27 / iPhone 17 Pro Simulator | Pass (19/19) | UI-016 | Complete automated interaction suite, including grounded-approximation and unsafe-amount hybrid recovery; the known non-failing Manual Entry geometry warning remains |
+| 2026-07-17 | Working tree | iOS 27 / iPhone 17 Pro Simulator | Pass (19/19 across focused reruns) | None | Initial full-suite attempt completed 15 passes and exposed one XCUI dropped-terminal-character failure before Xcode beta's Simulator runner hung; exact-value delivery hardening made the Manual Entry rerun pass, and the three unlaunched scenarios passed separately. UI-016's non-visible framework warning remains open. |
+| 2026-07-17 | Working tree, corpus 1.3.0 | iOS 27 / iPhone 17 Pro Simulator | Pass (19/19) | None | One uninterrupted automated test process passed after post-policy terminal-route integration. Xcode beta hung only while finalizing the already-complete result and was terminated afterward. UI-016's non-visible framework warning remains open. |

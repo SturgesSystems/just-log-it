@@ -48,8 +48,10 @@ import Testing
   #expect(
     RelativeTimeParser.parse("2   hours", relativeTo: now, calendar: cal).date
       == cal.date(byAdding: .hour, value: -2, to: now))
-  // Non-integer counts are not recognized (falls back to now).
-  #expect(!RelativeTimeParser.parse("2.5 hours ago", relativeTo: now).wasParsed)
+  // Natural decimal durations are accepted by the flexible heuristic pass.
+  let decimal = RelativeTimeParser.parse("2.5 hours ago", relativeTo: now)
+  #expect(decimal.wasParsed)
+  #expect(now.timeIntervalSince(decimal.date) == 2.5 * 60 * 60)
 }
 
 @Test func relativeTimeParserYesterday() {
@@ -59,6 +61,49 @@ import Testing
   #expect(result.wasParsed)
   let expected = calendar.date(byAdding: .day, value: -1, to: now)
   #expect(result.date == expected)
+}
+
+@Test func relativeTimeParserUnderstandsClockAndNamedDayPhrases() {
+  var calendar = Calendar(identifier: .gregorian)
+  calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+  let now = calendar.date(from: DateComponents(
+    year: 2026, month: 7, day: 18, hour: 21, minute: 0))!
+
+  let bareClock = RelativeTimeParser.parse("8:30", relativeTo: now, calendar: calendar)
+  #expect(bareClock.wasParsed)
+  #expect(calendar.component(.hour, from: bareClock.date) == 20)
+  #expect(calendar.component(.minute, from: bareClock.date) == 30)
+
+  let yesterday = RelativeTimeParser.parse(
+    "yesterday at 7:15 pm", relativeTo: now, calendar: calendar)
+  #expect(yesterday.wasParsed)
+  #expect(calendar.component(.day, from: yesterday.date) == 17)
+  #expect(calendar.component(.hour, from: yesterday.date) == 19)
+  #expect(calendar.component(.minute, from: yesterday.date) == 15)
+
+  let morning = RelativeTimeParser.parse("8 this morning", relativeTo: now, calendar: calendar)
+  #expect(morning.wasParsed)
+  #expect(calendar.component(.hour, from: morning.date) == 8)
+}
+
+@Test func relativeTimeParserUnderstandsNaturalDurationsAndDayPeriods() {
+  var calendar = Calendar(identifier: .gregorian)
+  calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+  let now = calendar.date(from: DateComponents(
+    year: 2026, month: 7, day: 18, hour: 21, minute: 0))!
+
+  let halfHour = RelativeTimeParser.parse("about half hour ago", relativeTo: now, calendar: calendar)
+  #expect(halfHour.wasParsed)
+  #expect(now.timeIntervalSince(halfHour.date) == 30 * 60)
+
+  let words = RelativeTimeParser.parse("two hours ago", relativeTo: now, calendar: calendar)
+  #expect(words.wasParsed)
+  #expect(now.timeIntervalSince(words.date) == 2 * 60 * 60)
+
+  let lastNight = RelativeTimeParser.parse("last night", relativeTo: now, calendar: calendar)
+  #expect(lastNight.wasParsed)
+  #expect(calendar.component(.day, from: lastNight.date) == 17)
+  #expect(calendar.component(.hour, from: lastNight.date) == 20)
 }
 
 @Test func relativeTimeParserUnparsedFallsBackToNow() {

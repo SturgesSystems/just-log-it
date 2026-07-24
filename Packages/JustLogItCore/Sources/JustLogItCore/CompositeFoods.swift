@@ -105,3 +105,72 @@ public enum CompositeDraftBuilder {
     return make(name: trimmed.isEmpty ? nil : trimmed, components: components)
   }
 }
+
+/// Pure progress / failure copy for multi-food composite assembly (unit-testable).
+public enum CompositeMatchingProgress {
+  /// 1-based position of the active component and total remaining queue size.
+  public static func position(
+    confirmedCount: Int,
+    remainingAfterActive: Int
+  ) -> (index: Int, total: Int) {
+    let index = max(1, confirmedCount + 1)
+    let total = max(index, confirmedCount + 1 + max(0, remainingAfterActive))
+    return (index, total)
+  }
+
+  public static func displayLabel(for componentLabel: String) -> String {
+    let trimmed = componentLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? "item" : trimmed
+  }
+
+  /// Typing-bubble label while USDA lookup runs for one component.
+  public static func searchingMessage(componentLabel: String, index: Int, total: Int) -> String {
+    let name = displayLabel(for: componentLabel)
+    if total > 1, (1...total).contains(index) {
+      return "Matching \(name) (\(index) of \(total))…"
+    }
+    return "Matching \(name)…"
+  }
+
+  /// Assistant transcript line when a component enters the queue.
+  public static func queueTurn(componentLabel: String, index: Int, total: Int) -> String {
+    let name = displayLabel(for: componentLabel)
+    if total > 1, (1...total).contains(index) {
+      return "Matching \(name) (\(index) of \(total))."
+    }
+    return "Matching \(name)."
+  }
+
+  /// Compact caption under the USDA picker (no ellipsis).
+  public static func pickerCaption(componentLabel: String, index: Int, total: Int) -> String {
+    let name = displayLabel(for: componentLabel)
+    if total > 1, (1...total).contains(index) {
+      return "\(name) · \(index) of \(total)"
+    }
+    return name
+  }
+
+  /// Failure copy that preserves confirmed components and offers recovery paths.
+  public static func failureMessage(
+    componentLabel: String,
+    confirmedCount: Int,
+    detail: String
+  ) -> String {
+    let name = displayLabel(for: componentLabel)
+    let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+    var parts: [String] = ["Couldn’t match \(name)."]
+    if !trimmedDetail.isEmpty {
+      parts.append(trimmedDetail)
+    }
+    if confirmedCount > 0 {
+      let keep =
+        confirmedCount == 1
+        ? "1 other item remains in this meal"
+        : "\(confirmedCount) other items remain in this meal"
+      parts.append("\(keep) — edit the search, enter manually, or skip this item.")
+    } else {
+      parts.append("Edit the search, enter manually, or skip this item.")
+    }
+    return parts.joined(separator: " ")
+  }
+}

@@ -4,6 +4,12 @@ This is the release-level, user-driven UI pass for JustLogIt. Run it on an iPhon
 
 Log every unexpected behavior in [`UIBugs.md`](UIBugs.md) as soon as it is observed. Continue testing when the failure is non-destructive; otherwise stop the affected scenario and preserve the app state for diagnosis.
 
+## Siri / App Shortcuts
+
+This document does **not** cover Siri or Shortcuts invocation. For App Shortcut discovery, warm/cold handoff, consumed-time preservation, cancellation, and related negatives, use the full checklist:
+
+- **[`ManualSiriAcceptance.md`](ManualSiriAcceptance.md)** — prefers a physical iOS 27 device; phrases and actions must match `JustLogIt/AppIntents/JustLogItShortcuts.swift`.
+
 ## Test record
 
 | Field | Value |

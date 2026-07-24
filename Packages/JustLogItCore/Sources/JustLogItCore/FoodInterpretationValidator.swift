@@ -52,6 +52,7 @@ public struct FoodInterpretationValidator: Sendable {
       descriptors: fact(parsed.descriptors),
       isApproximate: parsed.isApproximate,
       containsMultipleFoods: parsed.containsMultipleFoods,
+      multipleFoodAssessment: parsed.multipleFoodAssessment,
       ambiguityNotes: parsed.ambiguityNotes,
       componentNames: parsed.componentNames,
       quantityNeedsClarification: parsed.quantityNeedsClarification,

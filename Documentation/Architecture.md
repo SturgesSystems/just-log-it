@@ -26,6 +26,18 @@ After a confirmed USDA save, `RememberedFoodCatalog` stores a normalized lookup 
 
 `HealthKitNutritionWriter` maps every supported USDA nutrient to its exact HealthKit dietary type and writes one food correlation. `HealthSyncCoordinator` keeps logging local-first and persists pending, synced, denied, failed, or deletion-pending state. Authorization is requested only from explicit user actions: enabling sync in Settings or tapping **Try Apple Health Again** for a denied/failed entry. Automatic entry saving and reconciliation never present permission UI, and the app requests write access only.
 
+### Siri / Shortcuts / URL handoff
+
+App Intents are a thin input adapter: they deliver user-authored food text and optional consumed time into the same reviewed logging workflow. They do not supply USDA identity, nutrition values, or silent persistence. Release 1 is foreground handoff only; any later in-Siri confirmation still uses the shared parser, USDA, serving, and save path.
+
+```text
+Siri / Shortcuts / URL
+  → App Intents (StartFoodLogIntent, SearchFoodLogsIntent)
+  → SiriFoodLogCoordinator / AppNavigation.pendingFoodLog
+  → LogView consume → existing LogViewModel pipeline
+  → confirm → SwiftData → optional HealthKit
+```
+
 On launch and foreground activation, pending and retryable failed writes reconcile only while Health sync is enabled. Automatic retries use persisted bounded backoff. Deleting a synced entry first persists a tombstone containing its stable app-owned sync identity; the local entry remains until Health cleanup succeeds. Health deletion uses exact `HKMetadataKeySyncIdentifier` predicates for the correlation and nutrient samples, and HealthKit independently restricts deletion to objects saved by this app.
 
 The Cloudflare Worker directory is a credential-shielding boundary with strict request validation, controlled outbound headers, no application cache/database of food queries, header-based USDA authentication (`X-Api-Key`), redirect rejection, JSON-only success responses, 2 MiB upstream body limits, and a fail-closed singleton Durable Object that stores only `{epochHour, count}` for a 900 requests/hour global USDA budget. It is not production infrastructure until it is deployed with an encrypted USDA secret and its Cloudflare logging, transforms, visitor metadata, privacy behavior, route/rollback, and operational limits are audited.

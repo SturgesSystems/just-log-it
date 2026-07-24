@@ -73,6 +73,7 @@ struct SettingsView: View {
   @State private var confirmsCacheClear = false
   @State private var confirmsRememberedClear = false
   @State private var cacheResultMessage: String?
+  @State private var foodCacheSizeDescription = "Empty"
   @State private var rememberedResultMessage: String?
   @State private var rememberedSelections: [RememberedFoodSelection] = []
   @State private var healthSettings = HealthSyncSettingsModel()
@@ -80,38 +81,44 @@ struct SettingsView: View {
 
   var body: some View {
     List {
-      Section("Food data") {
-        LabeledContent("Provider", value: providerDisplayDescription)
+      Section {
+        LabeledContent {
+          Text(providerDisplayDescription)
+        } label: {
+          Label("Provider", systemImage: "leaf")
+        }
 
         if configuration.providerDescription == "Not configured" {
           Label {
             Text("USDA search is unavailable. Manual nutrition entry still works.")
           } icon: {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: "exclamationmark.triangle.fill")
               .foregroundStyle(.orange)
           }
         }
 
-        Button("Clear downloaded food cache", systemImage: "trash") {
+        LabeledContent {
+          Text(foodCacheSizeDescription)
+            .foregroundStyle(.secondary)
+        } label: {
+          Label("Downloaded food cache", systemImage: "externaldrive")
+        }
+        .accessibilityIdentifier("food-cache-size")
+
+        Button("Clear downloaded food cache", systemImage: "externaldrive.badge.minus") {
           confirmsCacheClear = true
         }
-
-        Text(
-          "Clearing the cache does not delete logged entries. Food details will be downloaded again when needed."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
 
         Button("Clear remembered food matches", systemImage: "clock.arrow.circlepath") {
           confirmsRememberedClear = true
         }
         .accessibilityIdentifier("clear-remembered-foods")
-
+      } header: {
+        Text("Food data")
+      } footer: {
         Text(
-          "Remembered matches only reorder USDA results after you confirm a food. They never auto-select nutrition."
+          "Cache size is approximate. Clearing the cache does not delete logged entries; food details download again when needed. Remembered matches only reorder USDA results after you confirm a food — they never auto-select nutrition. Offline, previously downloaded foods may still match."
         )
-        .font(.caption)
-        .foregroundStyle(.secondary)
       }
 
       if !rememberedSelections.isEmpty {
@@ -131,6 +138,7 @@ struct SettingsView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel(rememberedAccessibilityLabel(selection))
+            .accessibilityIdentifier("remembered-food-\(selection.fdcID)")
             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
               Button("Forget", role: .destructive) {
                 forgetRemembered(selection)
@@ -138,7 +146,7 @@ struct SettingsView: View {
             }
           }
         } header: {
-          Text("Remembered matches")
+          Label("Remembered matches", systemImage: "bookmark")
         } footer: {
           Text("Swipe to forget a match. This does not delete log entries.")
         }
@@ -172,19 +180,86 @@ struct SettingsView: View {
         )
       }
 
-      Section("Privacy") {
-        Label("No accounts, analytics, or advertising", systemImage: "hand.raised")
+      Section {
+        Label {
+          Text("Say “Log food in JustLogIt”")
+        } icon: {
+          Image(systemName: "mic.fill")
+            .foregroundStyle(.tint)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Say Log food in JustLogIt")
+        .accessibilityHint("Siri asks what you ate before opening JustLogIt for review")
+
+        Label {
+          Text("Opens JustLogIt for review — never auto-saves")
+        } icon: {
+          Image(systemName: "checkmark.shield")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Opens JustLogIt for review — never auto-saves")
+        .accessibilityHint("Siri only starts a log; you always confirm before nutrition is saved")
+
+        Label {
+          Text("Shortcuts lists “Log Food” after install")
+        } icon: {
+          Image(systemName: "square.grid.2x2")
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Shortcuts lists Log Food after install")
+        .accessibilityHint("The Shortcuts app shows JustLogIt’s Log Food action after install")
+      } header: {
+        Text("Siri & Shortcuts")
+      } footer: {
         Text(
-          "Food descriptions are interpreted on device. Your saved food log and nutrition history stay on this device."
-        )
-        Text(
-          "When you search FoodData Central, only derived food search terms are sent to the configured USDA service. JustLogIt does not intentionally retain those searches on a server."
+          "Siri only supplies the spoken phrase and an optional time. Food interpretation stays on this device. JustLogIt opens so you can review before anything is saved — nutrition is never written without your confirmation. After install, the Shortcuts app shows JustLogIt’s “Log Food” action."
         )
       }
 
-      Section("About") {
-        LabeledContent("Version", value: versionDescription)
-        LabeledContent("Food data", value: "USDA FoodData Central")
+      Section {
+        Label("No accounts, analytics, or advertising", systemImage: "hand.raised.fill")
+        Label {
+          Text(
+            "Food descriptions are interpreted on device. Your saved food log and nutrition history stay on this device."
+          )
+        } icon: {
+          Image(systemName: "iphone")
+            .foregroundStyle(.secondary)
+        }
+        Label {
+          Text(
+            "When you search FoodData Central, only derived food search terms are sent to the configured USDA service. JustLogIt does not intentionally retain those searches on a server."
+          )
+        } icon: {
+          Image(systemName: "network")
+            .foregroundStyle(.secondary)
+        }
+      } header: {
+        Text("Privacy")
+      } footer: {
+        Text(
+          "Siri and Shortcuts may pass a food phrase and optional time into JustLogIt. They do not choose foods or write nutrition for you."
+        )
+      }
+
+      Section {
+        LabeledContent {
+          Text(versionDescription)
+        } label: {
+          Label("Version", systemImage: "info.circle")
+        }
+        LabeledContent {
+          Text("USDA FoodData Central")
+        } label: {
+          Label("Food data", systemImage: "building.columns")
+        }
+      } header: {
+        Text("About")
       }
     }
     .navigationTitle("Settings")
@@ -210,7 +285,10 @@ struct SettingsView: View {
     } message: {
       Text(rememberedResultMessage ?? "")
     }
-    .onAppear(perform: reloadRememberedSelections)
+    .onAppear {
+      reloadRememberedSelections()
+      refreshFoodCacheSize()
+    }
   }
 
   private var providerDisplayDescription: String {
@@ -282,19 +360,17 @@ struct SettingsView: View {
     return parts.joined(separator: ", ")
   }
 
+  private func refreshFoodCacheSize() {
+    foodCacheSizeDescription = DiskCachedFoodDataProvider.approximateCacheSizeDescription()
+  }
+
   private func clearCache() {
     let fileManager = FileManager.default
-    let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-    guard
-      let directory = base?.appending(
-        path: DiskCachedFoodDataProvider.cacheDirectoryName, directoryHint: .isDirectory)
-    else {
-      cacheResultMessage = "The food cache could not be located."
-      return
-    }
+    let directory = DiskCachedFoodDataProvider.defaultCacheDirectory
 
     guard fileManager.fileExists(atPath: directory.path()) else {
       cacheResultMessage = "The food cache is already empty."
+      refreshFoodCacheSize()
       return
     }
 
@@ -304,6 +380,7 @@ struct SettingsView: View {
     } catch {
       cacheResultMessage = "The food cache could not be cleared. Please try again."
     }
+    refreshFoodCacheSize()
   }
 
 }

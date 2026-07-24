@@ -1,5 +1,10 @@
 import Foundation
 
+public enum MultipleFoodAssessment: String, Sendable, Equatable, Codable {
+  case single
+  case multiple
+}
+
 public struct ParsedFoodRequest: Sendable, Equatable, Codable {
   public var brand: String?
   public var productName: String
@@ -17,6 +22,8 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
   public var descriptors: [String]
   public var isApproximate: Bool
   public var containsMultipleFoods: Bool
+  /// Deterministic coordinator metadata. Nil preserves legacy/model-first inference behavior.
+  public var multipleFoodAssessment: MultipleFoodAssessment?
   public var ambiguityNotes: String?
   /// Distinct foods to look up separately for a composite log (e.g. cereal, milk).
   public var componentNames: [String]
@@ -46,6 +53,7 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
     descriptors: [String] = [],
     isApproximate: Bool = false,
     containsMultipleFoods: Bool = false,
+    multipleFoodAssessment: MultipleFoodAssessment? = nil,
     ambiguityNotes: String? = nil,
     componentNames: [String] = [],
     quantityNeedsClarification: Bool = false,
@@ -69,6 +77,7 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
     self.descriptors = descriptors
     self.isApproximate = isApproximate
     self.containsMultipleFoods = containsMultipleFoods
+    self.multipleFoodAssessment = multipleFoodAssessment
     self.ambiguityNotes = ambiguityNotes
     self.componentNames = componentNames
     self.quantityNeedsClarification = quantityNeedsClarification
@@ -80,6 +89,18 @@ public struct ParsedFoodRequest: Sendable, Equatable, Codable {
 
 public protocol FoodDescriptionParsing: Sendable {
   func parse(_ input: String) async throws -> ParsedFoodRequest
+  func parse(semanticContext: String, groundingText: String) async throws -> ParsedFoodRequest
+}
+
+extension FoodDescriptionParsing {
+  /// Compatibility path for parsers that do not distinguish assistant context from user evidence.
+  /// Hybrid implementations override this requirement and ground only against `groundingText`.
+  public func parse(
+    semanticContext: String,
+    groundingText: String
+  ) async throws -> ParsedFoodRequest {
+    try await parse(semanticContext)
+  }
 }
 
 public struct FoodSearchRequest: Sendable, Equatable, Codable {
@@ -269,6 +290,10 @@ public struct FoodDetails: Sendable, Equatable, Codable {
   public let servingSize: Double?
   public let servingSizeUnit: String?
   public let householdServing: String?
+  /// Every usable USDA `foodPortions[]` row. `servingSize`/`householdServing` remain the
+  /// preferred default for backward compatibility, while amount resolution can use the
+  /// specific row that matches what the user actually entered.
+  public let foodPortions: [USDAFoodPortion]
   public let nutrientsPer100Grams: [NutrientAmount]
   public let nutrientsPerServing: [NutrientAmount]
   public let publicationDate: String?
@@ -276,6 +301,7 @@ public struct FoodDetails: Sendable, Equatable, Codable {
   public init(
     fdcID: Int, description: String, brandOwner: String? = nil, dataType: String,
     servingSize: Double? = nil, servingSizeUnit: String? = nil, householdServing: String? = nil,
+    foodPortions: [USDAFoodPortion] = [],
     nutrientsPer100Grams: [NutrientAmount] = [], nutrientsPerServing: [NutrientAmount] = [],
     publicationDate: String? = nil
   ) {
@@ -286,9 +312,33 @@ public struct FoodDetails: Sendable, Equatable, Codable {
     self.servingSize = servingSize
     self.servingSizeUnit = servingSizeUnit
     self.householdServing = householdServing
+    self.foodPortions = foodPortions
     self.nutrientsPer100Grams = nutrientsPer100Grams
     self.nutrientsPerServing = nutrientsPerServing
     self.publicationDate = publicationDate
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case fdcID, description, brandOwner, dataType, servingSize, servingSizeUnit, householdServing
+    case foodPortions, nutrientsPer100Grams, nutrientsPerServing, publicationDate
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    fdcID = try container.decode(Int.self, forKey: .fdcID)
+    description = try container.decode(String.self, forKey: .description)
+    brandOwner = try container.decodeIfPresent(String.self, forKey: .brandOwner)
+    dataType = try container.decode(String.self, forKey: .dataType)
+    servingSize = try container.decodeIfPresent(Double.self, forKey: .servingSize)
+    servingSizeUnit = try container.decodeIfPresent(String.self, forKey: .servingSizeUnit)
+    householdServing = try container.decodeIfPresent(String.self, forKey: .householdServing)
+    foodPortions =
+      try container.decodeIfPresent([USDAFoodPortion].self, forKey: .foodPortions) ?? []
+    nutrientsPer100Grams =
+      try container.decodeIfPresent([NutrientAmount].self, forKey: .nutrientsPer100Grams) ?? []
+    nutrientsPerServing =
+      try container.decodeIfPresent([NutrientAmount].self, forKey: .nutrientsPerServing) ?? []
+    publicationDate = try container.decodeIfPresent(String.self, forKey: .publicationDate)
   }
 }
 

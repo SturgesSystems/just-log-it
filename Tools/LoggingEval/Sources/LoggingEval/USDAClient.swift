@@ -164,11 +164,12 @@ private struct DetailsDTO: Decodable {
 
   var domain: FoodDetails {
     let per100Grams = NutrientMap.canonicalize(foodNutrients ?? [])
+    let portions = (foodPortions ?? []).map(\.domain)
     let resolved = FoodPortionServing.resolve(
       servingSize: servingSize,
       servingSizeUnit: servingSizeUnit,
       householdServing: householdServingFullText,
-      portions: (foodPortions ?? []).map(\.domain)
+      portions: portions
     )
     let perServing = NutrientMap.servingFromPer100(
       per100Grams: per100Grams,
@@ -183,6 +184,7 @@ private struct DetailsDTO: Decodable {
       servingSize: resolved.servingSize,
       servingSizeUnit: resolved.servingSizeUnit,
       householdServing: resolved.householdServing,
+      foodPortions: portions,
       nutrientsPer100Grams: per100Grams,
       nutrientsPerServing: perServing,
       publicationDate: publicationDate

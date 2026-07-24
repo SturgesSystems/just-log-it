@@ -50,6 +50,18 @@ public struct FoodSearchResultRanker: Sendable {
       descriptionTokens.contains(where: { Self.matches(foodForm, $0) })
     {
       score += 80
+
+      // USDA descriptions generally put the food's primary name before the first comma.
+      // "Rice, white, cooked" names rice itself, while "Rice noodles, cooked" introduces
+      // a different primary form after the requested head. Prefer the named food unless the
+      // person explicitly included that trailing form in the product or qualifiers.
+      if Self.introducesUnrequestedPrimaryForm(
+        result.description,
+        after: foodForm,
+        intent: intent
+      ) {
+        score -= 90
+      }
     }
 
     let qualifierMatches = intent.qualifierTokens.filter { queryToken in
@@ -143,6 +155,29 @@ extension FoodSearchResultRanker {
 
   fileprivate static func matches(_ lhs: String, _ rhs: String) -> Bool {
     !tokenForms(lhs).isDisjoint(with: tokenForms(rhs))
+  }
+
+  fileprivate static func introducesUnrequestedPrimaryForm(
+    _ description: String,
+    after foodForm: String,
+    intent: Intent
+  ) -> Bool {
+    let primaryName =
+      description.split(separator: ",", maxSplits: 1).first.map(String.init) ?? description
+    let primaryTokens = tokens(primaryName)
+    let formIndices = primaryTokens.indices.filter { matches(foodForm, primaryTokens[$0]) }
+    guard !formIndices.isEmpty else { return false }
+
+    // Do not penalize when any occurrence is already terminal after removing words the person
+    // asked for. This handles brands/prefixes and descriptions that repeat the food form.
+    return formIndices.allSatisfy { formIndex in
+      primaryTokens.dropFirst(formIndex + 1).contains { token in
+        !connectorTokens.contains(token)
+          && !intent.productTokens.contains(where: { matches($0, token) })
+          && !intent.brandTokens.contains(where: { matches($0, token) })
+          && !intent.qualifierTokens.contains(where: { matches($0, token) })
+      }
+    }
   }
 
   fileprivate static func tokenForms(_ token: String) -> Set<String> {

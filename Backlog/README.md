@@ -21,6 +21,7 @@ This folder is the durable product backlog for JustLogIt. It deliberately separa
 | P2 | [HealthKit](HealthKit.md) | Optional nutrition write-back | Users value retained entries |
 | P2 | [Offline data](OfflineData.md) | Private/offline USDA lookup | Offline demand is demonstrated |
 | P2 | [Remembered foods](RememberedFoods.md) | Faster repeat logging | Repeat-query rate is material |
+| P2 | [Siri AI integration](SiriAIIntegration.md) | Start a reviewed food log by voice, then add confirmed quick logging | Spike A partial in-tree (Start Food Log → reviewed Log); close physical-device Shortcuts/Siri UAT; B/C after hybrid device gates |
 | P3 | [Photo-assisted identification](PhotoAssistedFoodIdentification.md) | Private on-device photo proposals feeding the normal review flow | Clarification foundation and physical-device image API spike pass |
 | P3 | [USDA mirror](USDAMirror.md) | Remove live USDA quota dependency | Quota, privacy, or reliability justifies it |
 

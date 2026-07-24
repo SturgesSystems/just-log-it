@@ -2,68 +2,6 @@ import Foundation
 import FoundationModels
 import JustLogItCore
 
-#if DEBUG
-  import OSLog
-#endif
-
-#if DEBUG
-  enum AppPerformanceTrace {
-    private static let logger = Logger(
-      subsystem: Bundle.main.bundleIdentifier ?? "JustLogIt",
-      category: "Performance"
-    )
-    private static let signposter = OSSignposter(logger: logger)
-
-    static func measure<Value>(
-      _ name: StaticString,
-      operation: () throws -> Value
-    ) rethrows -> Value {
-      let started = ContinuousClock.now
-      let state = signposter.beginInterval(name)
-      do {
-        let value = try operation()
-        finish(name, state: state, started: started, outcome: "success")
-        return value
-      } catch {
-        finish(name, state: state, started: started, outcome: "failure")
-        throw error
-      }
-    }
-
-    static func measure<Value>(
-      _ name: StaticString,
-      isolation: isolated (any Actor)? = #isolation,
-      operation: () async throws -> Value
-    ) async rethrows -> Value {
-      let started = ContinuousClock.now
-      let state = signposter.beginInterval(name)
-      do {
-        let value = try await operation()
-        finish(name, state: state, started: started, outcome: "success")
-        return value
-      } catch {
-        finish(name, state: state, started: started, outcome: "failure")
-        throw error
-      }
-    }
-
-    private static func finish(
-      _ name: StaticString,
-      state: OSSignpostIntervalState,
-      started: ContinuousClock.Instant,
-      outcome: StaticString
-    ) {
-      signposter.endInterval(name, state)
-      let components = started.duration(to: .now).components
-      let milliseconds =
-        Double(components.seconds) * 1_000 + Double(components.attoseconds) / 1_000_000_000_000_000
-      logger.debug(
-        "\(String(describing: name), privacy: .public) duration_ms=\(milliseconds, privacy: .public) outcome=\(String(describing: outcome), privacy: .public)"
-      )
-    }
-  }
-#endif
-
 enum FoodParserError: LocalizedError {
   case unavailable(String)
   case emptyInput
@@ -96,7 +34,8 @@ private struct GeneratedFoodDescription {
 
   @Guide(
     description:
-      "Concise food database search terms without quantity or conversational filler. Empty when productName is empty.")
+      "Concise food database search terms without quantity or conversational filler. Empty when productName is empty."
+  )
   var searchTerms: String
 
   @Guide(
@@ -147,7 +86,8 @@ private struct GeneratedFoodDescription {
 
   @Guide(
     description:
-      "Lookup descriptors such as flavor, crust type, variety, cut, size, fat percentage, or product line."
+      "Lookup descriptors such as flavor, crust type, variety, cut, size, fat percentage, or product line.",
+    .maximumCount(6)
   )
   var descriptors: [String]
 
@@ -165,7 +105,8 @@ private struct GeneratedFoodDescription {
 
   @Guide(
     description:
-      "When containsMultipleFoods is true, list each distinct food to look up separately, short names only (e.g. cereal, milk). Empty when a single food. Do not invent foods not present in the message."
+      "When containsMultipleFoods is true, list each distinct food to look up separately, short names only (e.g. cereal, milk). Empty when a single food. Do not invent foods not present in the message.",
+    .maximumCount(8)
   )
   var componentNames: [String]
 
@@ -206,7 +147,8 @@ private struct GeneratedFoodDescription {
       When productName is empty (identity gap): leave this array EMPTY — the person should type the food name freeform. Do not suggest warm, cooked, delicious, yummy, or other non-food words.
       When food is known: concrete answers only, e.g. "2 scrambled", "3 fried", "1 cup".
       When multiple foods: short food names from the message only.
-      """
+      """,
+    .maximumCount(4)
   )
   var clarificationSuggestions: [String]
 }
@@ -239,81 +181,358 @@ enum FoundationModelsPromptProfile: String, CaseIterable, Sendable {
   }
 }
 
-struct FoundationModelsFoodParser: FoodDescriptionParsing {
-  private let promptProfile: FoundationModelsPromptProfile
+/// Experimental model choice for the on-device parser evaluation harness.
+/// Production remains on the general-purpose model until device measurements
+/// show that content tagging preserves the app's clarification behavior.
+enum FoundationModelsModelUseCase: String, CaseIterable, Sendable {
+  case general
+  case contentTagging
 
-  init(promptProfile: FoundationModelsPromptProfile = .production) {
+  var systemUseCase: SystemLanguageModel.UseCase {
+    switch self {
+    case .general: .general
+    case .contentTagging: .contentTagging
+    }
+  }
+}
+
+/// Evaluation dimension for measuring whether light reasoning earns its latency/token cost.
+/// App construction never reads this from runtime configuration: production always uses the
+/// capability-aware default and omits reasoning only when the selected model cannot support it.
+enum FoundationModelsReasoningPolicy: String, CaseIterable, Sendable {
+  case capabilityAwareLight
+  #if DEBUG
+    case disabled
+  #endif
+
+  func contextOptions(supportsReasoning: Bool) -> ContextOptions {
+    switch self {
+    case .capabilityAwareLight:
+      ContextOptions(reasoningLevel: supportsReasoning ? .light : nil)
+    #if DEBUG
+      case .disabled:
+        ContextOptions(reasoningLevel: nil)
+    #endif
+    }
+  }
+}
+
+/// Optional capability kept separate from `FoodDescriptionParsing` so Core and
+/// test parsers do not need to know about Foundation Models session lifecycle.
+protocol FoodDescriptionParserPrewarming: Sendable {
+  func prewarm() async
+}
+
+/// Content-free measurements exposed only when the device evaluation harness injects a recorder.
+/// These are observable app intervals and Foundation Models usage counters—not model-loading or
+/// time-to-first-token measurements, which the framework APIs used here do not expose.
+struct FoundationModelsEvaluationMetrics: Sendable, Equatable {
+  var prewarmLatencyMilliseconds: Double? = nil
+  var sessionAcquisitionLatencyMilliseconds: Double? = nil
+  var responseLatencyMilliseconds: Double? = nil
+  var mappingLatencyMilliseconds: Double? = nil
+  var inputTokenCount: Int? = nil
+  var cachedInputTokenCount: Int? = nil
+  var outputTokenCount: Int? = nil
+  var reasoningTokenCount: Int? = nil
+  var totalTokenCount: Int? = nil
+}
+
+/// One invocation at a time is recorded because the physical evaluation harness runs each parser
+/// instance sequentially. Production constructs neither this actor nor any metrics snapshot.
+actor FoundationModelsEvaluationMetricsRecorder {
+  private var pendingPrewarmLatencyMilliseconds: Double?
+  private var active: FoundationModelsEvaluationMetrics?
+  private var completed: FoundationModelsEvaluationMetrics?
+
+  func recordPrewarm(_ duration: Duration) {
+    pendingPrewarmLatencyMilliseconds = Self.milliseconds(duration)
+  }
+
+  func beginInvocation() {
+    active = FoundationModelsEvaluationMetrics(
+      prewarmLatencyMilliseconds: pendingPrewarmLatencyMilliseconds
+    )
+    pendingPrewarmLatencyMilliseconds = nil
+  }
+
+  func recordSessionAcquisition(_ duration: Duration) {
+    active?.sessionAcquisitionLatencyMilliseconds = Self.milliseconds(duration)
+  }
+
+  func recordResponse(
+    _ duration: Duration,
+    inputTokenCount: Int,
+    cachedInputTokenCount: Int,
+    outputTokenCount: Int,
+    reasoningTokenCount: Int,
+    totalTokenCount: Int
+  ) {
+    active?.responseLatencyMilliseconds = Self.milliseconds(duration)
+    active?.inputTokenCount = Self.count(inputTokenCount)
+    active?.cachedInputTokenCount = Self.count(cachedInputTokenCount)
+    active?.outputTokenCount = Self.count(outputTokenCount)
+    active?.reasoningTokenCount = Self.count(reasoningTokenCount)
+    active?.totalTokenCount = Self.count(totalTokenCount)
+  }
+
+  /// Records a completed framework call that ended in an error before usage became available.
+  func recordResponse(_ duration: Duration) {
+    active?.responseLatencyMilliseconds = Self.milliseconds(duration)
+  }
+
+  func recordMapping(_ duration: Duration) {
+    active?.mappingLatencyMilliseconds = Self.milliseconds(duration)
+  }
+
+  func finishInvocation() {
+    completed = active
+    active = nil
+  }
+
+  /// Consumes the most recently completed invocation so metrics cannot bleed into another case.
+  func takeCompletedInvocation() -> FoundationModelsEvaluationMetrics? {
+    defer { completed = nil }
+    return completed
+  }
+
+  private static func milliseconds(_ duration: Duration) -> Double {
+    let bounded = AppObservability.BoundedDuration(duration).value
+    let components = bounded.components
+    return Double(components.seconds) * 1_000
+      + Double(components.attoseconds) / 1_000_000_000_000_000
+  }
+
+  private static func count(_ value: Int) -> Int {
+    AppObservability.Count(value).value
+  }
+}
+
+/// Holds at most one unused, prewarmed session. Taking it removes it from the
+/// pool, so a session that has accumulated a transcript is never reused for a
+/// different food description.
+private struct FoundationModelsFoodParserSessionPool: Sendable {
+  private let model: SystemLanguageModel
+  private let pool: OneShotPreparedResourcePool<LanguageModelSession>
+
+  init(model: SystemLanguageModel, instructions: String) {
+    self.model = model
+    self.pool = OneShotPreparedResourcePool {
+      LanguageModelSession(model: model, tools: [], instructions: instructions)
+    }
+  }
+
+  @discardableResult
+  func prewarm() async -> Bool {
+    guard case .available = model.availability else { return false }
+    do {
+      return try await pool.prewarm { session in
+        try AppObservability.measure(.parserPrewarm) {
+          try Task.checkCancellation()
+          session.prewarm(promptPrefix: Prompt(FoundationModelsFoodParser.promptPrefix))
+          try Task.checkCancellation()
+        }
+      }
+    } catch is CancellationError {
+      // Prewarming is speculative. Cancellation deliberately leaves no prepared session behind.
+      return false
+    } catch {
+      // Foundation Models prewarm is currently nonthrowing; retain a safe no-op if that changes.
+      return false
+    }
+  }
+
+  func takeSession() async -> LanguageModelSession {
+    await pool.acquire().resource
+  }
+}
+
+struct FoundationModelsFoodParser: FoodDescriptionParsing, FoodDescriptionParserPrewarming {
+  fileprivate static let promptPrefix = "Interpret this food description: "
+
+  private let promptProfile: FoundationModelsPromptProfile
+  private let modelUseCase: FoundationModelsModelUseCase
+  private let reasoningPolicy: FoundationModelsReasoningPolicy
+  private let model: SystemLanguageModel
+  private let sessionPool: FoundationModelsFoodParserSessionPool
+  private let evaluationMetricsRecorder: FoundationModelsEvaluationMetricsRecorder?
+
+  init(
+    promptProfile: FoundationModelsPromptProfile = .production,
+    modelUseCase: FoundationModelsModelUseCase = .general,
+    reasoningPolicy: FoundationModelsReasoningPolicy = .capabilityAwareLight,
+    evaluationMetricsRecorder: FoundationModelsEvaluationMetricsRecorder? = nil
+  ) {
     self.promptProfile = promptProfile
+    self.modelUseCase = modelUseCase
+    self.reasoningPolicy = reasoningPolicy
+    let model = SystemLanguageModel(useCase: modelUseCase.systemUseCase)
+    self.model = model
+    self.sessionPool = FoundationModelsFoodParserSessionPool(
+      model: model,
+      instructions: promptProfile.instructions
+    )
+    self.evaluationMetricsRecorder = evaluationMetricsRecorder
+  }
+
+  func prewarm() async {
+    guard let evaluationMetricsRecorder else {
+      await sessionPool.prewarm()
+      return
+    }
+    let started = ContinuousClock.now
+    let performed = await sessionPool.prewarm()
+    if performed {
+      await evaluationMetricsRecorder.recordPrewarm(started.duration(to: .now))
+    }
+  }
+
+  static func contextOptions(
+    supportsReasoning: Bool,
+    reasoningPolicy: FoundationModelsReasoningPolicy = .capabilityAwareLight
+  ) -> ContextOptions {
+    reasoningPolicy.contextOptions(supportsReasoning: supportsReasoning)
   }
 
   func parse(_ input: String) async throws -> ParsedFoodRequest {
-    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { throw FoodParserError.emptyInput }
+    try await parse(semanticContext: input, groundingText: input)
+  }
 
-    let model = SystemLanguageModel.default
-    #if DEBUG
-      let availability = AppPerformanceTrace.measure("FM availability") { model.availability }
-    #else
-      let availability = model.availability
-    #endif
+  func parse(
+    semanticContext: String,
+    groundingText: String
+  ) async throws -> ParsedFoodRequest {
+    guard let evaluationMetricsRecorder else {
+      return try await performParse(
+        semanticContext: semanticContext,
+        groundingText: groundingText
+      )
+    }
+    await evaluationMetricsRecorder.beginInvocation()
+    do {
+      let parsed = try await performParse(
+        semanticContext: semanticContext,
+        groundingText: groundingText
+      )
+      await evaluationMetricsRecorder.finishInvocation()
+      return parsed
+    } catch {
+      await evaluationMetricsRecorder.finishInvocation()
+      throw error
+    }
+  }
+
+  private func performParse(
+    semanticContext: String,
+    groundingText: String
+  ) async throws -> ParsedFoodRequest {
+    let inputs = try Self.normalizedInputs(
+      semanticContext: semanticContext,
+      groundingText: groundingText
+    )
+
+    let availability = AppObservability.measure(.parserAvailability) { model.availability }
     switch availability {
     case .available:
+      AppObservability.recordParserAvailability(.available)
       break
     case .unavailable(.deviceNotEligible):
+      AppObservability.recordParserAvailability(.deviceNotEligible)
       throw FoodParserError.unavailable(
         "Apple Intelligence is not supported on this device. Search manually instead.")
     case .unavailable(.appleIntelligenceNotEnabled):
+      AppObservability.recordParserAvailability(.intelligenceDisabled)
       throw FoodParserError.unavailable(
         "Apple Intelligence is turned off. Enable it in Settings or search manually.")
     case .unavailable(.modelNotReady):
+      AppObservability.recordParserAvailability(.modelNotReady)
       throw FoodParserError.unavailable(
         "The on-device language model is not ready yet. Search manually while it finishes preparing."
       )
     case .unavailable:
+      AppObservability.recordParserAvailability(.otherUnavailable)
       throw FoodParserError.unavailable(
         "The on-device language model is unavailable. Search manually instead.")
     }
 
-    #if DEBUG
-      let session = AppPerformanceTrace.measure("FM session creation") {
-        makeSession(model: model)
-      }
-    #else
-      let session = makeSession(model: model)
-    #endif
+    let sessionStarted = ContinuousClock.now
+    let session = await AppObservability.measure(.parserSessionAcquisition) {
+      let session = await sessionPool.takeSession()
+      return session
+    }
+    await evaluationMetricsRecorder?.recordSessionAcquisition(
+      sessionStarted.duration(to: .now))
     let options = GenerationOptions(
       samplingMode: .greedy, temperature: 0, maximumResponseTokens: 500)
-    #if DEBUG
-      let response = try await AppPerformanceTrace.measure("FM respond") {
-        try await session.respond(
-          to: "Interpret this food description: \(trimmed)",
-          generating: GeneratedFoodDescription.self,
-          options: options
-        )
+    let contextOptions = Self.contextOptions(
+      supportsReasoning: model.capabilities.contains(.reasoning),
+      reasoningPolicy: reasoningPolicy)
+    let responseStarted = ContinuousClock.now
+    let response = try await {
+      do {
+        return try await AppObservability.measure(.parserResponse) {
+          try await session.respond(
+            to: Self.promptPrefix + inputs.semanticContext,
+            generating: GeneratedFoodDescription.self,
+            options: options,
+            contextOptions: contextOptions
+          )
+        }
+      } catch {
+        await evaluationMetricsRecorder?.recordResponse(responseStarted.duration(to: .now))
+        throw error
       }
-    #else
-      let response = try await session.respond(
-        to: "Interpret this food description: \(trimmed)",
-        generating: GeneratedFoodDescription.self,
-        options: options
-      )
-    #endif
+    }()
+    await evaluationMetricsRecorder?.recordResponse(
+      responseStarted.duration(to: .now),
+      inputTokenCount: response.usage.input.totalTokenCount,
+      cachedInputTokenCount: response.usage.input.cachedTokenCount,
+      outputTokenCount: response.usage.output.totalTokenCount,
+      reasoningTokenCount: response.usage.output.reasoningTokenCount,
+      totalTokenCount: response.usage.totalTokenCount
+    )
+    AppObservability.recordCount(
+      .parserInputTokens, .init(response.usage.input.totalTokenCount))
+    AppObservability.recordCount(
+      .parserCachedInputTokens, .init(response.usage.input.cachedTokenCount))
+    AppObservability.recordCount(
+      .parserOutputTokens, .init(response.usage.output.totalTokenCount))
+    AppObservability.recordCount(
+      .parserReasoningTokens, .init(response.usage.output.reasoningTokenCount))
     let generated = response.content
-    #if DEBUG
-      return try AppPerformanceTrace.measure("FM mapping") {
-        try map(generated, originalInput: trimmed)
+    let mappingStarted = ContinuousClock.now
+    let parsed: ParsedFoodRequest
+    do {
+      parsed = try AppObservability.measure(.parserMapping) {
+        // Conversation context may help the model understand a clarification reply, but it is not
+        // evidence. Only user-authored grounding text can authorize facts that affect nutrition.
+        try map(generated, originalInput: inputs.groundingText)
       }
-    #else
-      return try map(generated, originalInput: trimmed)
-    #endif
+    } catch {
+      await evaluationMetricsRecorder?.recordMapping(mappingStarted.duration(to: .now))
+      throw error
+    }
+    await evaluationMetricsRecorder?.recordMapping(mappingStarted.duration(to: .now))
+    let route: AppObservability.ParserRoute
+    if parsed.containsMultipleFoods && parsed.componentNames.count >= 2 {
+      route = .composite
+    } else if parsed.clarificationPrompt != nil {
+      route = .clarification
+    } else {
+      route = .searchReady
+    }
+    AppObservability.recordParserRoute(route)
+    return parsed
   }
 
-  private func makeSession(model: SystemLanguageModel) -> LanguageModelSession {
-    LanguageModelSession(
-      model: model,
-      tools: [],
-      instructions: promptProfile.instructions
-    )
+  static func normalizedInputs(
+    semanticContext: String,
+    groundingText: String
+  ) throws -> (semanticContext: String, groundingText: String) {
+    let context = semanticContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let evidence = groundingText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !evidence.isEmpty else { throw FoodParserError.emptyInput }
+    return (context.isEmpty ? evidence : context, evidence)
   }
 
   private func map(

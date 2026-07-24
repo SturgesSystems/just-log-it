@@ -24,6 +24,8 @@
 	<string>public.app-category.healthcare-fitness</string>
 	<key>NSCameraUsageDescription</key>
 	<string>JustLogIt uses the camera so you can photograph food to log.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>JustLogIt uses the microphone only when you tap the microphone button to transcribe what you ate on this device.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>JustLogIt saves nutrition you choose to Apple Health.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -44,6 +46,19 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.example.JustLogIt</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>justlogit</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+		</dict>
 	</array>
 </dict>
 </plist>

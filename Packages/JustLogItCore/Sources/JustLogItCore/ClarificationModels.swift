@@ -170,6 +170,7 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
   public var descriptors: FieldFact<[String]>
   public var isApproximate: Bool
   public var containsMultipleFoods: Bool
+  public var multipleFoodAssessment: MultipleFoodAssessment?
   public var ambiguityNotes: String?
   public var componentNames: [String]
   /// Copied from model output; soft clarify uses `clarificationPrompt` only.
@@ -202,6 +203,7 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
       value: [], provenance: .unknown, confidence: .unknown),
     isApproximate: Bool = false,
     containsMultipleFoods: Bool = false,
+    multipleFoodAssessment: MultipleFoodAssessment? = nil,
     ambiguityNotes: String? = nil,
     componentNames: [String] = [],
     quantityNeedsClarification: Bool = false,
@@ -230,6 +232,7 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
     self.descriptors = descriptors
     self.isApproximate = isApproximate
     self.containsMultipleFoods = containsMultipleFoods
+    self.multipleFoodAssessment = multipleFoodAssessment
     self.ambiguityNotes = ambiguityNotes
     self.componentNames = componentNames
     self.quantityNeedsClarification = quantityNeedsClarification
@@ -296,6 +299,7 @@ public struct FoodInterpretationDraft: Sendable, Equatable {
       descriptors: descriptors.value,
       isApproximate: isApproximate,
       containsMultipleFoods: containsMultipleFoods,
+      multipleFoodAssessment: multipleFoodAssessment,
       ambiguityNotes: ambiguityNotes,
       componentNames: componentNames,
       quantityNeedsClarification: quantityNeedsClarification,

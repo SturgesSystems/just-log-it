@@ -5,8 +5,8 @@ Status key: `[ ]` open · `[~]` in progress · `[x]` done
 ## P0 — Crash / correctness
 
 1. [x] Diagnose Apple Health crash (SIGABRT on `requestAuthorization` via `_throwIfAuthorizationDisallowedForSharing`)
-2. [ ] Catch/disallow-safe HealthKit authorization + softer unit mapping (no `preconditionFailure`)
-3. [ ] Tests for authorization failure → user-visible error, no crash
+2. [x] Catch/disallow-safe HealthKit authorization + softer unit mapping (no `preconditionFailure`)
+3. [x] Tests for authorization failure → user-visible error, no crash
 
 ## P1 — Chat logging UX
 

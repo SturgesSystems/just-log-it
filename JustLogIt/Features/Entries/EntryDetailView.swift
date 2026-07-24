@@ -1,3 +1,4 @@
+import AppIntents
 import JustLogItCore
 import SwiftData
 import SwiftUI
@@ -17,14 +18,20 @@ struct EntryDetailView: View {
   var body: some View {
     List {
       Section {
-        LabeledContent("Amount", value: entry.quantityDisplay)
+        if entry.isCompositeEntry {
+          Label {
+            Text("Composite meal")
+          } icon: {
+            Image(systemName: "square.stack.3d.up.fill")
+          }
+          .foregroundStyle(Color.accentColor)
+          LabeledContent("Items", value: entry.quantityDisplay)
+        } else {
+          LabeledContent("Amount", value: entry.quantityDisplay)
+        }
         LabeledContent(
           "Logged", value: entry.consumedAt.formatted(date: .abbreviated, time: .shortened))
         LabeledContent("Source", value: entry.source.rawValue)
-        if entry.isCompositeEntry {
-          Label("Composite meal", systemImage: "square.stack.3d.up")
-            .foregroundStyle(.secondary)
-        }
         if entry.isApproximate {
           Label("Quantity is approximate", systemImage: "tilde")
             .foregroundStyle(.secondary)
@@ -36,29 +43,50 @@ struct EntryDetailView: View {
       }
 
       if entry.isCompositeEntry, !entry.components.isEmpty {
+        // Per-item macros first so each food is scannable before the combined total.
         ForEach(Array(entry.components.enumerated()), id: \.offset) { index, component in
           Section {
             CompositeComponentNutritionView(component: component, showExtended: true)
               .padding(.vertical, 4)
+              .accessibilityIdentifier("entry-component-\(index)")
             if let fdcID = component.fdcID {
               LabeledContent("FDC ID", value: String(fdcID))
             }
           } header: {
-            Text(entry.components.count > 1 ? "Item \(index + 1)" : "Item")
+            VStack(alignment: .leading, spacing: 2) {
+              Text(component.displayName)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+              if entry.components.count > 1 {
+                Text("Item \(index + 1) of \(entry.components.count) · per-item macros")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              } else {
+                Text("Per-item macros")
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
+            }
+            .textCase(nil)
           }
         }
 
-        Section("Meal total") {
+        Section {
           MacroSummaryView(nutrients: entry.nutrients, showExtended: true)
             .padding(.vertical, 4)
+            .accessibilityIdentifier("entry-meal-total")
           DisclosureGroup("All nutrients") {
             NutrientSummaryView(nutrients: entry.nutrients)
               .padding(.top, 8)
           }
+        } header: {
+          Label("Meal total", systemImage: "sum")
+        } footer: {
+          Text("Combined nutrition from every item above.")
         }
       } else {
         Section("Nutrition") {
-          NutrientSummaryView(nutrients: entry.nutrients)
+          MacroSummaryView(nutrients: entry.nutrients, showExtended: true)
             .padding(.vertical, 4)
         }
       }
@@ -110,7 +138,7 @@ struct EntryDetailView: View {
               value: "\(grams.formatted(.number.precision(.fractionLength(0...1)))) g"
             )
           }
-          if let multiplier = entry.servingMultiplier {
+          if entry.calculationBasis == .servings, let multiplier = entry.servingMultiplier {
             LabeledContent(
               "Servings logged",
               value: multiplier.formatted(.number.precision(.fractionLength(0...2)))
@@ -121,7 +149,18 @@ struct EntryDetailView: View {
     }
     .navigationTitle(entry.displayName)
     .navigationBarTitleDisplayMode(.inline)
+    // On-screen App Entity awareness for Siri / Apple Intelligence (Spike A).
+    // Not Spotlight-indexed; query resolution remains a stub.
+    .appEntityIdentifier(
+      EntityIdentifier(for: FoodLogEntryEntity.self, identifier: entry.id)
+    )
     .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        ShareLink(item: FoodLogEntryShareText.plainText(for: entry)) {
+          Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .accessibilityIdentifier("share-entry")
+      }
       ToolbarItem(placement: .topBarTrailing) {
         Button("Delete", systemImage: "trash", role: .destructive) {
           confirmsDeletion = true

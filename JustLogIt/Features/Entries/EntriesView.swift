@@ -11,6 +11,7 @@ struct EntriesView: View {
   }
 
   @Environment(\.modelContext) private var modelContext
+  @EnvironmentObject private var appNavigation: AppNavigation
   @Query(sort: \FoodLogEntryRecord.consumedAt, order: .reverse)
   private var entries: [FoodLogEntryRecord]
   @Query(sort: \RecognizedFoodRecord.lastUsedAt, order: .reverse)
@@ -20,7 +21,7 @@ struct EntriesView: View {
   @State private var searchText = ""
   @State private var entryPendingDeletion: FoodLogEntryRecord?
   @State private var deletionError: String?
-  @State private var navigationPath = NavigationPath()
+  @State private var navigationPath: [EntryRoute] = []
   let onLogFood: () -> Void
 
   init(onLogFood: @escaping () -> Void = {}) {
@@ -57,6 +58,27 @@ struct EntriesView: View {
       .sorted { $0.date > $1.date }
   }
 
+  /// Unfiltered entries whose `consumedAt` falls on the current calendar day.
+  private var todaysEntries: [FoodLogEntryRecord] {
+    entries.filter { Calendar.current.isDateInToday($0.consumedAt) }
+  }
+
+  /// Totals for today via shared snapshot logic (same as App Intent / future widgets).
+  private var todaySnapshot: TodayNutritionSnapshot {
+    let calendar = Calendar.current
+    let dayStart = calendar.startOfDay(for: .now)
+    let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400)
+    return TodayNutritionSnapshot.make(dayStart: dayStart, dayEnd: dayEnd, entries: todaysEntries)
+  }
+
+  /// Whether any of today's entries carried a primary macro (energy/P/C/F).
+  private var todayHasAnyMacro: Bool {
+    let primary: Set<NutrientKey> = [.energy, .protein, .carbohydrate, .totalFat]
+    return todaysEntries.contains { entry in
+      entry.nutrients.contains { primary.contains($0.key) && $0.amount.isFinite }
+    }
+  }
+
   var body: some View {
     NavigationStack(path: $navigationPath) {
       VStack(spacing: 0) {
@@ -80,6 +102,8 @@ struct EntriesView: View {
         }
       }
       .navigationTitle("Entries")
+      .toolbarBackground(.bar, for: .navigationBar)
+      .toolbarBackgroundVisibility(.visible, for: .navigationBar)
       .navigationDestination(for: EntryRoute.self) { route in
         switch route {
         case .entry(let id):
@@ -120,15 +144,18 @@ struct EntriesView: View {
         Text(deletionError ?? "The entry could not be deleted.")
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: AppNavigation.openEntry)) { note in
-      guard let id = AppNavigation.entryID(from: note) else { return }
-      pane = .logs
-      navigationPath.append(EntryRoute.entry(id))
+    .onAppear {
+      consumePendingNavigation()
+      consumePendingSearch()
     }
-    .onReceive(NotificationCenter.default.publisher(for: AppNavigation.openFood)) { note in
-      guard let id = AppNavigation.foodID(from: note) else { return }
-      pane = .foods
-      navigationPath.append(EntryRoute.food(id))
+    .onChange(of: appNavigation.selectedEntryID) { _, _ in
+      consumePendingNavigation()
+    }
+    .onChange(of: appNavigation.selectedFoodID) { _, _ in
+      consumePendingNavigation()
+    }
+    .onChange(of: appNavigation.pendingSearchQuery) { _, _ in
+      consumePendingSearch()
     }
   }
 
@@ -138,22 +165,34 @@ struct EntriesView: View {
       ContentUnavailableView {
         Label("No entries yet", systemImage: "fork.knife")
       } description: {
-        Text("Foods you log will appear here, with their saved nutrition snapshots.")
+        Text(
+          "Log a meal and it will show up here with calories, macros, and a full nutrition snapshot."
+        )
       } actions: {
         Button("Log food", systemImage: "plus", action: onLogFood)
           .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
       }
     } else if filteredEntries.isEmpty {
       ContentUnavailableView {
         Label("No matching entries", systemImage: "magnifyingglass")
       } description: {
-        Text("No foods match “\(searchText)”.")
+        Text("No foods match “\(searchText)”. Try another name, brand, or clear the search.")
       } actions: {
         Button("Clear search") { searchText = "" }
           .buttonStyle(.bordered)
       }
     } else {
       List {
+        Section {
+          todaySummaryRow
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+
         ForEach(groupedEntries, id: \.date) { group in
           Section(sectionTitle(for: group.date)) {
             ForEach(group.entries) { entry in
@@ -175,21 +214,37 @@ struct EntriesView: View {
   }
 
   @ViewBuilder
+  private var todaySummaryRow: some View {
+    if !todaysEntries.isEmpty {
+      DayNutritionSummaryView(snapshot: todaySnapshot, hasAnyMacro: todayHasAnyMacro)
+    } else {
+      DayNutritionEmptyStrip()
+    }
+  }
+
+  @ViewBuilder
   private var foodsContent: some View {
     if recognizedFoods.isEmpty {
       ContentUnavailableView {
         Label("No recognized foods yet", systemImage: "leaf")
       } description: {
-        Text("Foods you confirm while logging are remembered here for quick reference.")
+        Text(
+          "Foods you confirm while logging are remembered here so you can open details and log them again quickly."
+        )
       } actions: {
         Button("Log food", systemImage: "plus", action: onLogFood)
           .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
       }
     } else if filteredFoods.isEmpty {
       ContentUnavailableView {
         Label("No matching foods", systemImage: "magnifyingglass")
       } description: {
-        Text("No recognized foods match “\(searchText)”.")
+        Text(
+          "No recognized foods match “\(searchText)”. Try another name, brand, FDC ID, or clear the search."
+        )
       } actions: {
         Button("Clear search") { searchText = "" }
           .buttonStyle(.bordered)
@@ -212,6 +267,27 @@ struct EntriesView: View {
     if calendar.isDateInToday(date) { return "Today" }
     if calendar.isDateInYesterday(date) { return "Yesterday" }
     return date.formatted(.dateTime.weekday(.wide).month(.wide).day())
+  }
+
+  private func consumePendingNavigation() {
+    if let id = appNavigation.selectedEntryID {
+      appNavigation.selectedEntryID = nil
+      pane = .logs
+      navigationPath = EntriesNavigationPath.replacingCurrent(with: .entry(id))
+      return
+    }
+    if let id = appNavigation.selectedFoodID {
+      appNavigation.selectedFoodID = nil
+      pane = .foods
+      navigationPath = EntriesNavigationPath.replacingCurrent(with: .food(id))
+    }
+  }
+
+  private func consumePendingSearch() {
+    guard let query = appNavigation.takePendingSearchQuery() else { return }
+    pane = .logs
+    searchText = query
+    navigationPath = []
   }
 
   private var deletionConfirmationPresented: Binding<Bool> {
@@ -240,7 +316,13 @@ struct EntriesView: View {
   }
 }
 
-private enum EntryRoute: Hashable {
+enum EntryRoute: Hashable {
   case entry(UUID)
   case food(UUID)
+}
+
+enum EntriesNavigationPath {
+  static func replacingCurrent(with destination: EntryRoute) -> [EntryRoute] {
+    [destination]
+  }
 }

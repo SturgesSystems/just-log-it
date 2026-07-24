@@ -22,6 +22,67 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     XCTAssertEqual(HealthKitNutrientMapping(.water)?.unit, .literUnit(with: .milli))
   }
 
+  func testUnexpectedCanonicalUnitSoftFailsToGramWithoutCrashing() {
+    // Guardrail: unit mapping must never preconditionFailure on unknown strings.
+    XCTAssertEqual(HealthKitNutrientMapping.unit(forCanonicalUnit: "not-a-real-unit"), .gram())
+    XCTAssertEqual(HealthKitNutrientMapping.unit(forCanonicalUnit: ""), .gram())
+    XCTAssertEqual(HealthKitNutrientMapping.unit(forCanonicalUnit: "kcal"), .kilocalorie())
+  }
+
+  func testAuthorizationRequestsEveryWritableNutrientType() {
+    XCTAssertEqual(
+      Set(HealthKitNutrientMapping.requestableShareTypes.map(\.identifier)),
+      Set(HealthKitNutrientMapping.allQuantityTypes.map(\.identifier))
+    )
+  }
+
+  func testAuthorizationShareTypesExcludeFoodCorrelation() {
+    // CONTINUATION_HANDOFF: Food correlation is save-only. Requesting it in toShare
+    // raises "Authorization to share … HKCorrelationTypeIdentifierFood is disallowed".
+    // Share auth is quantity types only (requestableShareTypes == allQuantityTypes);
+    // save/delete still use the Food correlation type.
+    XCTAssertEqual(
+      Set(HealthKitNutrientMapping.requestableShareTypes.map(\.identifier)),
+      Set(HealthKitNutrientMapping.allQuantityTypes.map(\.identifier))
+    )
+    guard let foodType = HealthKitNutrientMapping.foodCorrelationType else {
+      return XCTFail("Food correlation type must remain available for save/delete")
+    }
+    XCTAssertTrue(foodType is HKCorrelationType)
+    XCTAssertTrue(
+      HealthKitNutrientMapping.deletionTargets(entryID: UUID())
+        .contains { $0.type == foodType }
+    )
+  }
+
+  func testAuthorizationDisallowedErrorSurfacesUserVisibleRecoveryMessage() {
+    let disallowed = HealthKitWriteError.authorizationFailure(
+      from: "Authorization to share the following types is disallowed: HKCorrelationTypeIdentifierFood"
+    )
+    XCTAssertEqual(
+      disallowed.errorDescription,
+      "Apple Health couldn’t authorize nutrition write access for this build. Try again on a device, or review Health permissions in Settings."
+    )
+
+    let empty = HealthKitWriteError.authorizationFailure(from: "")
+    XCTAssertEqual(
+      empty.errorDescription,
+      "Apple Health couldn’t open the permission sheet for this build. Check HealthKit signing and try again on a device."
+    )
+
+    let mappedFromNSError = HealthKitWriteError.authorizationFailure(
+      from: NSError(
+        domain: "com.apple.healthkit",
+        code: 5,
+        userInfo: [NSLocalizedDescriptionKey: "Authorization to share types is disallowed"]
+      )
+    )
+    XCTAssertTrue(
+      mappedFromNSError.errorDescription?.localizedCaseInsensitiveContains("couldn’t authorize")
+        == true
+    )
+  }
+
   func testDeletionTargetsAreExactUniqueIdentifiersForOneEntry() {
     let entryID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
     let identifiers = HealthKitNutrientMapping.deletionTargets(entryID: entryID)
@@ -53,11 +114,15 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     )
     context.insert(entry)
     try context.save()
-    UserDefaults.standard.set(true, forKey: HealthSyncCoordinator.preferenceKey)
-    defer { UserDefaults.standard.removeObject(forKey: HealthSyncCoordinator.preferenceKey) }
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
 
     let outcome = await HealthSyncCoordinator.syncIfEnabled(
-      entry, modelContext: context, writer: SuccessfulHealthWriter())
+      entry,
+      modelContext: context,
+      writer: SuccessfulHealthWriter(),
+      defaults: defaults
+    )
 
     XCTAssertEqual(outcome, .synced)
     XCTAssertEqual(entry.healthSyncStatus, .synced)
@@ -72,7 +137,7 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     let model = HealthSyncSettingsModel(writer: writer, defaults: defaults)
 
     let request = Task { await model.setEnabled(true) }
-    while !(await writer.didStartAuthorization()) { await Task.yield() }
+    await writer.waitUntilAuthorizationStarts()
 
     XCTAssertFalse(model.isEnabled)
     XCTAssertFalse(defaults.bool(forKey: HealthSyncCoordinator.preferenceKey))
@@ -98,6 +163,26 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     XCTAssertFalse(defaults.bool(forKey: HealthSyncCoordinator.preferenceKey))
     XCTAssertEqual(
       model.message, "Write access wasn’t granted. You can review access in Settings.")
+  }
+
+  @MainActor
+  func testSettingsAuthorizationThrowSurfacesUserVisibleErrorWithoutCrash() async {
+    let defaults = makeDefaults()
+    let writer = ThrowingAuthorizationWriter(
+      error: HealthKitWriteError.authorizationFailure(
+        from: "Authorization to share the following types is disallowed: HKCorrelationTypeIdentifierFood"
+      )
+    )
+    let model = HealthSyncSettingsModel(writer: writer, defaults: defaults)
+
+    await model.setEnabled(true)
+
+    XCTAssertFalse(model.isEnabled)
+    XCTAssertFalse(defaults.bool(forKey: HealthSyncCoordinator.preferenceKey))
+    XCTAssertEqual(
+      model.message,
+      "Apple Health couldn’t authorize nutrition write access for this build. Try again on a device, or review Health permissions in Settings."
+    )
   }
 
   @MainActor
@@ -155,6 +240,32 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     XCTAssertEqual(store.entry.healthSyncStatus, .denied)
     XCTAssertNotNil(store.entry.healthSyncError)
     XCTAssertEqual(authorizationRequests, 1)
+    XCTAssertEqual(saveRequests, 0)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testExplicitRetryAuthorizationThrowSurfacesUserVisibleErrorWithoutCrash() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let expectedMessage =
+      "Apple Health couldn’t authorize nutrition write access for this build. Try again on a device, or review Health permissions in Settings."
+    let writer = ThrowingAuthorizationWriter(
+      error: HealthKitWriteError.authorizationFailure(
+        from: "Authorization to share the following types is disallowed: HKCorrelationTypeIdentifierFood"
+      )
+    )
+    let store = try makeEntry(status: .failed)
+
+    let outcome = await HealthSyncCoordinator.retry(
+      store.entry, modelContext: store.context, writer: writer, defaults: defaults)
+    let saveRequests = await writer.saveRequestCount()
+
+    XCTAssertEqual(outcome, .denied(expectedMessage))
+    XCTAssertTrue(outcome.offersSettingsRecovery)
+    XCTAssertEqual(outcome.message, expectedMessage)
+    XCTAssertEqual(store.entry.healthSyncStatus, .denied)
+    XCTAssertEqual(store.entry.healthSyncError, expectedMessage)
     XCTAssertEqual(saveRequests, 0)
     withExtendedLifetime(store.container) {}
   }
@@ -221,6 +332,204 @@ final class HealthKitNutritionWriterTests: XCTestCase {
   }
 
   @MainActor
+  func testReconciliationFetchFailureDoesNotCallHealthWriter() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = TrackingHealthWriter(summary: .authorized)
+    let store = try makeEntry(status: .pending)
+    let persistence = HealthPersistenceFaultProbe(failEntryFetch: true).persistence
+
+    let summary = await HealthSyncCoordinator.reconcile(
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      persistence: persistence
+    )
+    let saveRequests = await writer.saveRequestCount()
+
+    XCTAssertEqual(summary.persistenceFailures, 1)
+    XCTAssertEqual(summary.attemptedCount, 0)
+    XCTAssertEqual(saveRequests, 0)
+    XCTAssertEqual(store.entry.healthSyncStatus, .pending)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testPreWritePersistenceFailureRollsBackAndNeverCallsHealthWriter() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = TrackingHealthWriter(summary: .authorized)
+    let store = try makeEntry()
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [1]).persistence
+
+    let outcome = await HealthSyncCoordinator.syncIfEnabled(
+      store.entry,
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      persistence: persistence
+    )
+    let saveRequests = await writer.saveRequestCount()
+
+    guard case .failed = outcome else {
+      return XCTFail("A failed pending-state commit must fail the sync")
+    }
+    XCTAssertEqual(saveRequests, 0)
+    XCTAssertEqual(store.entry.healthSyncStatus, .notRequested)
+    XCTAssertNil(store.entry.healthSyncError)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testPostWritePersistenceFailureLeavesDurablePendingStateAndCanRecover() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = TrackingHealthWriter(summary: .authorized)
+    let store = try makeEntry()
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [2]).persistence
+
+    let uncertain = await HealthSyncCoordinator.syncIfEnabled(
+      store.entry,
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      persistence: persistence
+    )
+    let initialSaveRequests = await writer.saveRequestCount()
+
+    guard case .failed(let message) = uncertain else {
+      return XCTFail("A failed completion-state commit must not report synced")
+    }
+    XCTAssertTrue(message.contains("may have been updated"))
+    XCTAssertEqual(initialSaveRequests, 1)
+    XCTAssertEqual(store.entry.healthSyncStatus, .pending)
+    XCTAssertNil(store.entry.healthSyncedAt)
+
+    let recovered = await HealthSyncCoordinator.reconcile(
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults
+    )
+    let recoveredSaveRequests = await writer.saveRequestCount()
+
+    XCTAssertEqual(recovered.writesCompleted, 1)
+    XCTAssertEqual(store.entry.healthSyncStatus, .synced)
+    XCTAssertNotNil(store.entry.healthSyncedAt)
+    XCTAssertEqual(recoveredSaveRequests, 2)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testFailedWriterStateSaveFailureDoesNotExposeUncommittedFailedState() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = TrackingHealthWriter(summary: .authorized, saveShouldFail: true)
+    let store = try makeEntry()
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [2]).persistence
+
+    let outcome = await HealthSyncCoordinator.syncIfEnabled(
+      store.entry,
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      persistence: persistence
+    )
+    let saveRequests = await writer.saveRequestCount()
+
+    guard case .failed(let message) = outcome else {
+      return XCTFail("A failed failure-state commit must remain a failed outcome")
+    }
+    XCTAssertTrue(message.contains("couldn’t save the retry status"))
+    XCTAssertEqual(saveRequests, 1)
+    XCTAssertEqual(store.entry.healthSyncStatus, .pending)
+    XCTAssertNil(store.entry.healthSyncError)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testDeniedWriterStateSaveFailureDoesNotExposeUncommittedDeniedState() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = DeniedHealthWriter()
+    let store = try makeEntry()
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [2]).persistence
+
+    let outcome = await HealthSyncCoordinator.syncIfEnabled(
+      store.entry,
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      persistence: persistence
+    )
+    let saveRequests = await writer.saveRequestCount()
+
+    guard case .failed(let message) = outcome else {
+      return XCTFail("An uncommitted denied state must not be reported as durable")
+    }
+    XCTAssertTrue(message.contains("couldn’t save that status"))
+    XCTAssertEqual(saveRequests, 1)
+    XCTAssertEqual(store.entry.healthSyncStatus, .pending)
+    XCTAssertNil(store.entry.healthSyncError)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testWriteReconciliationSaveFailureDoesNotCallHealthWriterOrConsumeRetry() async throws {
+    let defaults = makeDefaults()
+    defaults.set(true, forKey: HealthSyncCoordinator.preferenceKey)
+    let writer = TrackingHealthWriter(summary: .authorized)
+    let store = try makeEntry(status: .failed)
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [1]).persistence
+
+    let summary = await HealthSyncCoordinator.reconcile(
+      modelContext: store.context,
+      writer: writer,
+      defaults: defaults,
+      now: Date(timeIntervalSince1970: 3_500),
+      persistence: persistence
+    )
+    let saveRequests = await writer.saveRequestCount()
+
+    XCTAssertEqual(summary.writesFailed, 1)
+    XCTAssertEqual(saveRequests, 0)
+    XCTAssertEqual(store.entry.healthSyncStatus, .failed)
+    XCTAssertEqual(store.entry.healthSyncRetryCount, 0)
+    XCTAssertNil(store.entry.healthSyncNextRetryAt)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
+  func testReconciliationSaveFailureDoesNotStartExternalDeletion() async throws {
+    let writer = TrackingHealthWriter(summary: .authorized)
+    let store = try makeEntry(status: .deletionPending)
+    let tombstone = HealthDeletionTombstone(
+      entryID: store.entry.id,
+      healthSyncVersion: store.entry.healthSyncVersion,
+      createdAt: Date(timeIntervalSince1970: 4_000)
+    )
+    store.context.insert(tombstone)
+    try store.context.save()
+    let persistence = HealthPersistenceFaultProbe(failingSaveNumbers: [1]).persistence
+
+    let summary = await HealthSyncCoordinator.reconcile(
+      modelContext: store.context,
+      writer: writer,
+      defaults: makeDefaults(),
+      now: Date(timeIntervalSince1970: 4_001),
+      persistence: persistence
+    )
+    let deleteRequests = await writer.deleteRequestCount()
+
+    XCTAssertEqual(summary.deletionsFailed, 1)
+    XCTAssertEqual(summary.persistenceFailures, 1)
+    XCTAssertEqual(deleteRequests, 0)
+    XCTAssertEqual(tombstone.retryCount, 0)
+    XCTAssertNil(tombstone.nextRetryAt)
+    XCTAssertEqual(store.entry.healthSyncStatus, .deletionPending)
+    withExtendedLifetime(store.container) {}
+  }
+
+  @MainActor
   func testFailedHealthDeletionKeepsEntryAndDurableTombstone() async throws {
     let writer = TrackingHealthWriter(summary: .authorized, deleteShouldFail: true)
     let store = try makeEntry(status: .synced)
@@ -274,6 +583,9 @@ final class HealthKitNutritionWriterTests: XCTestCase {
     let suiteName = "HealthKitNutritionWriterTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.removePersistentDomain(forName: suiteName)
+    addTeardownBlock {
+      UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
     return defaults
   }
 
@@ -336,13 +648,20 @@ private actor DelayedAuthorizationWriter: HealthNutritionWriting {
   nonisolated let isAvailable = true
   private var continuation: CheckedContinuation<HealthAuthorizationSummary, Never>?
   private var started = false
+  private var startWaiters: [CheckedContinuation<Void, Never>] = []
 
   func requestAuthorization() async throws -> HealthAuthorizationSummary {
     started = true
+    let waiters = startWaiters
+    startWaiters.removeAll()
+    for waiter in waiters { waiter.resume() }
     return await withCheckedContinuation { continuation = $0 }
   }
 
-  func didStartAuthorization() -> Bool { started }
+  func waitUntilAuthorizationStarts() async {
+    guard !started else { return }
+    await withCheckedContinuation { startWaiters.append($0) }
+  }
 
   func finishAuthorization(_ summary: HealthAuthorizationSummary) {
     continuation?.resume(returning: summary)
@@ -407,8 +726,96 @@ private actor TrackingHealthWriter: HealthNutritionWriting {
   func deleteRequestCount() -> Int { deleteRequests }
 }
 
+private actor DeniedHealthWriter: HealthNutritionWriting {
+  nonisolated let isAvailable = true
+  private var saveRequests = 0
+
+  func requestAuthorization() async throws -> HealthAuthorizationSummary { .authorized }
+
+  func save(
+    entryID: UUID,
+    version: Int,
+    foodName: String,
+    consumedAt: Date,
+    source: EntrySource,
+    fdcID: Int?,
+    nutrients: [NutrientAmount]
+  ) async throws {
+    saveRequests += 1
+    throw HealthKitWriteError.noAuthorizedNutrients
+  }
+
+  func saveRequestCount() -> Int { saveRequests }
+}
+
+/// Produces a thrown authorization error so Settings/retry paths can be tested without
+/// invoking real HealthKit (which may SIGABRT on disallowed share types).
+private actor ThrowingAuthorizationWriter: HealthNutritionWriting {
+  nonisolated let isAvailable = true
+  private let error: HealthKitWriteError
+  private var saveRequests = 0
+
+  init(error: HealthKitWriteError) {
+    self.error = error
+  }
+
+  func requestAuthorization() async throws -> HealthAuthorizationSummary {
+    throw error
+  }
+
+  func save(
+    entryID: UUID,
+    version: Int,
+    foodName: String,
+    consumedAt: Date,
+    source: EntrySource,
+    fdcID: Int?,
+    nutrients: [NutrientAmount]
+  ) async throws {
+    saveRequests += 1
+  }
+
+  func saveRequestCount() -> Int { saveRequests }
+}
+
 private enum HealthWriterProbeError: LocalizedError, Sendable {
   case expected
 
   var errorDescription: String? { "Apple Health cleanup couldn’t be completed." }
+}
+
+@MainActor
+private final class HealthPersistenceFaultProbe {
+  private let failEntryFetch: Bool
+  private let failingSaveNumbers: Set<Int>
+  private var saveCount = 0
+
+  init(failEntryFetch: Bool = false, failingSaveNumbers: Set<Int> = []) {
+    self.failEntryFetch = failEntryFetch
+    self.failingSaveNumbers = failingSaveNumbers
+  }
+
+  var persistence: HealthSyncPersistence {
+    HealthSyncPersistence(
+      fetchEntries: { [self] context in
+        if failEntryFetch { throw HealthPersistenceProbeError.expected }
+        return try context.fetch(FetchDescriptor<FoodLogEntryRecord>())
+      },
+      fetchTombstones: { context in
+        try context.fetch(FetchDescriptor<HealthDeletionTombstone>())
+      },
+      save: { [self] context in
+        saveCount += 1
+        if failingSaveNumbers.contains(saveCount) {
+          throw HealthPersistenceProbeError.expected
+        }
+        try context.save()
+      },
+      rollback: { $0.rollback() }
+    )
+  }
+}
+
+private enum HealthPersistenceProbeError: Error {
+  case expected
 }

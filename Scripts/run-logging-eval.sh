@@ -34,7 +34,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 cd "$PACKAGE_PATH"
-# Foundation Models Generable APIs require macOS 26.4+ deployment target.
+# Usage metrics and light-reasoning context options require macOS 27.
 exec xcrun swift run \
-  -Xswiftc -target -Xswiftc arm64-apple-macos26.4 \
+  -Xswiftc -target -Xswiftc arm64-apple-macos27.0 \
   logging-eval "$@"

@@ -5,6 +5,31 @@ import XCTest
 
 @MainActor
 final class LogViewModelClarificationPolicyTests: XCTestCase {
+  func testTerminalResolvingParserSuppliesTheAppOutcomeWithoutASecondParseOrPolicyPass() async {
+    let provider = SearchCountingFoodProvider()
+    let resolution = FoodInterpretationTerminalResolver().resolve(
+      ParsedFoodRequest(productName: "", searchTerms: ""),
+      sourceText: "hello",
+      searchRoute: .onDeviceSemantic
+    )
+    let parser = FixedTerminalResolutionParser(resolution: resolution)
+    let model = LogViewModel(parser: parser, provider: provider)
+    model.input = "hello"
+
+    model.submit()
+    await waitUntil { model.stage == .failed }
+
+    XCTAssertEqual(resolution.route, .manualSearch)
+    XCTAssertEqual(model.stage, .failed)
+    XCTAssertEqual(model.failureKind, .interpretation)
+    let resolveCalls = await parser.resolveCalls
+    let parseCalls = await parser.parseCalls
+    let searchCalls = await provider.searchCalls
+    XCTAssertEqual(resolveCalls, 1)
+    XCTAssertEqual(parseCalls, 0)
+    XCTAssertEqual(searchCalls, 0)
+  }
+
   func testEmptyProductWithModelPromptDoesNotSearch() async {
     let provider = SearchCountingFoodProvider()
     let model = LogViewModel(
@@ -74,8 +99,24 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(whitespaceSearchCalls, 0)
   }
 
-  func testMultipleFoodsPresentsModelClarificationWithoutSearching() async {
-    let provider = SearchCountingFoodProvider()
+  func testMultipleFoodsBeginsCompositeEvenWithModelWhichOnePrompt() async {
+    let provider = SearchCountingFoodProvider(
+      searchResponse: FoodSearchResponse(
+        foods: [
+          FoodSearchResult(
+            fdcID: 5,
+            description: "Eggs, scrambled",
+            dataType: "Survey (FNDDS)",
+            servingSize: 100,
+            servingSizeUnit: "g",
+            householdServing: "1 large"
+          )
+        ],
+        totalHits: 1,
+        currentPage: 1,
+        totalPages: 1
+      )
+    )
     let model = LogViewModel(
       parser: FixedFoodParser(
         result: ParsedFoodRequest(
@@ -91,23 +132,18 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     model.input = "eggs and bacon"
 
     model.submit()
-    await waitUntil { model.stage == .awaitingClarification }
+    // Product prefers composite for eggs-and-bacon style multi-food meals.
+    await waitUntil { model.isBuildingComposite || model.stage == .failed }
 
-    XCTAssertEqual(model.stage, .awaitingClarification)
+    XCTAssertTrue(model.isBuildingComposite)
     XCTAssertNil(model.failureKind)
-    XCTAssertEqual(
-      model.activeQuestion?.prompt,
-      "It looks like more than one food. Which one do you want to log?"
-    )
-    XCTAssertEqual(model.activeQuestion?.code, .multipleFoods)
-    XCTAssertEqual(model.activeQuestion?.suggestedAnswers, ["eggs", "bacon"])
-    XCTAssertEqual(model.message, model.activeQuestion?.prompt)
-    XCTAssertNil(model.parsed)
-    let multiFoodSearchCalls = await provider.searchCalls
-    XCTAssertEqual(multiFoodSearchCalls, 0)
+    XCTAssertNil(model.activeQuestion)
+    XCTAssertEqual(model.activeCompositeComponent?.lowercased(), "eggs")
+    XCTAssertEqual(model.pendingCompositeNames.map { $0.lowercased() }, ["bacon"])
+    XCTAssertEqual((model.activeCompositeComponent == nil ? 0 : 1) + model.pendingCompositeNames.count, 2)
   }
 
-  func testAnsweringMultipleFoodsClarificationProceedsToSearch() async {
+  func testAnsweringUnsplittableMultipleFoodsClarificationProceedsToSearch() async {
     let provider = SearchCountingFoodProvider(
       searchResponse: FoodSearchResponse(
         foods: [
@@ -128,8 +164,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     let model = LogViewModel(
       parser: ScriptedFoodParser(results: [
         ParsedFoodRequest(
-          productName: "eggs and bacon",
-          searchTerms: "eggs and bacon",
+          productName: "mixed plate",
+          searchTerms: "mixed plate",
           containsMultipleFoods: true,
           clarificationPrompt: "Which one?",
           clarificationSuggestions: ["eggs", "bacon"]
@@ -144,7 +180,7 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
       ]),
       provider: provider
     )
-    model.input = "eggs and bacon"
+    model.input = "mixed plate"
     model.submit()
     await waitUntil { model.stage == .awaitingClarification }
 
@@ -217,8 +253,13 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
 
     model.clarificationAnswer = "3 scrambled"
     model.submitClarificationAnswer()
-    // Single high-confidence hit auto-selects, then asks for a resolvable amount.
-    await waitUntil { model.stage == .clarifying }
+    // The broader USDA description is not an exact identity, so the tightened
+    // policy keeps it in the picker before quantity resolution.
+    await waitUntil { model.stage == .choosing || model.stage == .failed }
+    if model.stage == .choosing, let first = model.results.first {
+      model.select(first)
+      await waitUntil { model.stage == .clarifying || model.stage == .failed }
+    }
 
     let afterAnswerCalls = await provider.searchCalls
     XCTAssertEqual(afterAnswerCalls, 1)
@@ -265,7 +306,7 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(searchCalls, 0, "Dismissive replies must not trigger USDA search")
   }
 
-  func testChoosingSuggestionAnswersClarification() async {
+  func testChoosingSuggestionAnswersUnsplittableMultipleFoodsClarification() async {
     let provider = SearchCountingFoodProvider(
       searchResponse: FoodSearchResponse(
         foods: [
@@ -279,8 +320,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     let model = LogViewModel(
       parser: ScriptedFoodParser(results: [
         ParsedFoodRequest(
-          productName: "eggs and bacon",
-          searchTerms: "eggs and bacon",
+          productName: "mixed plate",
+          searchTerms: "mixed plate",
           containsMultipleFoods: true,
           clarificationPrompt: "Which one?",
           clarificationSuggestions: ["eggs", "bacon"]
@@ -292,15 +333,19 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
       ]),
       provider: provider
     )
-    model.input = "eggs and bacon"
+    model.input = "mixed plate"
     model.submit()
     await waitUntil { model.stage == .awaitingClarification }
 
     XCTAssertEqual(model.activeQuestion?.suggestedAnswers, ["eggs", "bacon"])
 
     model.chooseClarificationSuggestion("bacon")
-    // Single high-confidence hit auto-selects, then asks for a resolvable amount.
-    await waitUntil { model.stage == .clarifying }
+    // A lone generic result is not permission to select nutrition silently.
+    await waitUntil { model.stage == .choosing || model.stage == .failed }
+    if model.stage == .choosing, let first = model.results.first {
+      model.select(first)
+      await waitUntil { model.stage == .clarifying || model.stage == .failed }
+    }
 
     XCTAssertEqual(model.parsed?.productName.lowercased(), "bacon")
     let searchCalls = await provider.searchCalls
@@ -312,15 +357,15 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     let model = LogViewModel(
       parser: FixedFoodParser(
         result: ParsedFoodRequest(
-          productName: "eggs and bacon",
-          searchTerms: "eggs and bacon",
+          productName: "mixed plate",
+          searchTerms: "mixed plate",
           containsMultipleFoods: true,
           clarificationPrompt: "Which one?"
         )
       ),
       provider: provider
     )
-    model.input = "eggs and bacon"
+    model.input = "mixed plate"
     model.submit()
     await waitUntil { model.stage == .awaitingClarification }
 
@@ -360,7 +405,8 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
           unit: "eggs"
         )
       ),
-      provider: provider
+      provider: provider,
+      rememberedFoods: EmptyRememberedFoodStore()
     )
     model.input = "2 scrambled eggs"
 
@@ -405,6 +451,57 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
     XCTAssertEqual(model.stage, .idle)
   }
 
+  func testCompositeMatchingStatusLabelUsesOrdinalProgress() {
+    let model = LogViewModel(provider: SearchCountingFoodProvider())
+    model.compositeSessionActive = true
+    model.compositeComponents = [
+      CompositeComponentSnapshot(
+        displayName: "Big Mac",
+        quantityDisplay: "1 item",
+        nutrients: [NutrientAmount(key: .energy, amount: 540)]
+      )
+    ]
+    model.pendingCompositeNames = []
+    model.activeCompositeComponent = "fries"
+
+    XCTAssertEqual(model.compositeMatchingStatusLabel, "Matching fries (2 of 2)…")
+    XCTAssertEqual(model.compositePickerCaption, "fries · 2 of 2")
+  }
+
+  func testSkipFailedCompositeComponentPreservesConfirmedItems() {
+    let model = LogViewModel(provider: SearchCountingFoodProvider())
+    model.compositeSessionActive = true
+    model.compositeSessionSource = "Big Mac and fries"
+    model.compositeComponents = [
+      CompositeComponentSnapshot(
+        displayName: "Big Mac",
+        quantityDisplay: "1 item",
+        nutrients: [
+          NutrientAmount(key: .energy, amount: 540),
+          NutrientAmount(key: .protein, amount: 25),
+        ]
+      )
+    ]
+    model.pendingCompositeNames = []
+    model.activeCompositeComponent = "fries"
+    model.stage = .failed
+    model.failureKind = .noResults
+    model.message = "Couldn’t match fries."
+
+    XCTAssertTrue(model.canSkipActiveCompositeComponent)
+    model.skipActiveCompositeComponent()
+
+    XCTAssertEqual(model.compositeComponents.count, 1)
+    XCTAssertEqual(model.compositeComponents.first?.displayName, "Big Mac")
+    XCTAssertFalse(model.isBuildingComposite)
+    XCTAssertNil(model.activeCompositeComponent)
+    XCTAssertEqual(model.stage, .reviewing)
+    XCTAssertEqual(
+      model.nutrients.first(where: { $0.key == .energy })?.amount,
+      540
+    )
+  }
+
   private func waitUntil(
     timeout: Duration = .seconds(1),
     condition: @escaping @MainActor () -> Bool
@@ -424,11 +521,43 @@ final class LogViewModelClarificationPolicyTests: XCTestCase {
   }
 }
 
+private final class EmptyRememberedFoodStore: RememberedFoodStoring, @unchecked Sendable {
+  func load() -> RememberedFoodCatalog {
+    RememberedFoodCatalog()
+  }
+
+  func save(_: RememberedFoodCatalog) {}
+}
+
 private struct FixedFoodParser: FoodDescriptionParsing {
   let result: ParsedFoodRequest
 
   func parse(_ input: String) async throws -> ParsedFoodRequest {
     result
+  }
+}
+
+private actor FixedTerminalResolutionParser: FoodDescriptionTerminalResolving {
+  let resolution: FoodInterpretationTerminalResolution
+  private(set) var resolveCalls = 0
+  private(set) var parseCalls = 0
+
+  init(resolution: FoodInterpretationTerminalResolution) {
+    self.resolution = resolution
+  }
+
+  func parse(_ input: String) async throws -> ParsedFoodRequest {
+    parseCalls += 1
+    return ParsedFoodRequest(productName: input, searchTerms: input)
+  }
+
+  func resolveForApplication(
+    semanticContext: String,
+    groundingText: String,
+    turnCount: Int
+  ) async throws -> FoodInterpretationTerminalResolution {
+    resolveCalls += 1
+    return resolution
   }
 }
 

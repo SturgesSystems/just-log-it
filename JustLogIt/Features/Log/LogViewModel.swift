@@ -3,6 +3,16 @@ import JustLogItCore
 import SwiftData
 import SwiftUI
 
+/// Transient provenance for a confirmed USDA component. The lookup key is already normalized,
+/// so composite saves can improve repeat ranking without copying the meal conversation into the
+/// persisted component snapshot.
+struct CompositeRememberedChoice: Equatable {
+  let lookupSignature: String
+  let fdcID: Int
+  let displayName: String
+  let brand: String?
+}
+
 @MainActor
 final class LogViewModel: ObservableObject {
   enum Stage: Equatable {
@@ -66,7 +76,7 @@ final class LogViewModel: ObservableObject {
   }
 
   let parser: any FoodDescriptionParsing
-  let imageProposer: FoundationModelsImageFoodProposer
+  let imageProposer: any FoodImageProposing
   let provider: any FoodDataProviding
   let rememberedFoods: any RememberedFoodStoring
   let queryBuilder = FoodSearchQueryBuilder()
@@ -74,48 +84,109 @@ final class LogViewModel: ObservableObject {
   let resolver = ServingResolutionService()
   let calculator = NutritionCalculator()
   let numberParser: LocalizedNumberParser
-  let interpretationValidator = FoodInterpretationValidator()
-  let clarificationPolicy = ClarificationPolicy()
+  let terminalResolver = FoodInterpretationTerminalResolver()
   var interpretationDraft: FoodInterpretationDraft?
   var operation: Task<Void, Never>?
   var operationGeneration: UInt = 0
+  var interactionTimeline: FoodLogInteractionTimeline?
   /// When true, the next `submit()` will not append a user turn (used after edit rewind).
   var skipNextUserTranscriptAppend = false
   var compositeSessionActive = false
+  /// Normalized query used by the currently visible component picker.
+  var activeCompositeLookupSignature: String?
+  /// Confirmed component choices retained only until this composite log is saved or discarded.
+  var compositeRememberedChoices: [CompositeRememberedChoice] = []
 
   var isBuildingComposite: Bool {
     compositeSessionActive
   }
 
+  /// Position of the active component among the meal queue (1-based).
+  var compositeMatchingPosition: (index: Int, total: Int)? {
+    guard compositeSessionActive, activeCompositeComponent != nil else { return nil }
+    return CompositeMatchingProgress.position(
+      confirmedCount: compositeComponents.count,
+      remainingAfterActive: pendingCompositeNames.count
+    )
+  }
+
+  /// Typing-bubble label while matching the active composite component.
+  var compositeMatchingStatusLabel: String? {
+    guard let active = activeCompositeComponent,
+      let position = compositeMatchingPosition
+    else { return nil }
+    return CompositeMatchingProgress.searchingMessage(
+      componentLabel: active,
+      index: position.index,
+      total: position.total
+    )
+  }
+
+  /// Compact caption for the USDA picker while building a composite.
+  var compositePickerCaption: String? {
+    guard let active = activeCompositeComponent,
+      let position = compositeMatchingPosition
+    else { return nil }
+    return CompositeMatchingProgress.pickerCaption(
+      componentLabel: active,
+      index: position.index,
+      total: position.total
+    )
+  }
+
   init(
     parser: (any FoodDescriptionParsing)? = nil,
-    imageProposer: FoundationModelsImageFoodProposer = FoundationModelsImageFoodProposer(),
+    imageProposer: (any FoodImageProposing)? = nil,
     provider: (any FoodDataProviding)? = nil,
     numberParser: LocalizedNumberParser = LocalizedNumberParser(),
     rememberedFoods: (any RememberedFoodStoring)? = nil
   ) {
     self.numberParser = numberParser
-    self.imageProposer = imageProposer
+    self.imageProposer = imageProposer ?? FoundationModelsImageFoodProposer()
     self.rememberedFoods = rememberedFoods ?? UserDefaultsRememberedFoodStore()
-    let isUITesting = ProcessInfo.processInfo.arguments.contains("-ui-testing")
-    if let parser {
-      self.parser = parser
-    } else if isUITesting {
-      self.parser = MockFoodParser()
-    } else {
-      self.parser = FoundationModelsFoodParser()
-    }
-    if let provider {
-      self.provider = provider
-    } else if isUITesting {
-      self.provider = MockFoodDataProvider()
-    } else {
-      self.provider = FoodDataProviderFactory.make()
-    }
+    #if DEBUG
+      let arguments = ProcessInfo.processInfo.arguments
+      let isUITesting = AppLaunchArgumentPolicy.isUITesting(
+        arguments: arguments,
+        honorsDebugArguments: true
+      )
+      let hasParserOverride = ["-baseline-parser", "-deterministic-parser", "-hybrid-parser"]
+        .contains(where: arguments.contains)
+      if let parser {
+        self.parser = parser
+      } else if isUITesting, let hybridParser = MockHybridFoodParser() {
+        self.parser = hybridParser
+      } else if isUITesting && !hasParserOverride {
+        self.parser = MockFoodParser()
+      } else {
+        self.parser = Self.makeDefaultParser()
+      }
+      if let provider {
+        self.provider = provider
+      } else if isUITesting {
+        self.provider = MockFoodDataProvider()
+      } else {
+        self.provider = FoodDataProviderFactory.make()
+      }
+    #else
+      self.parser = parser ?? Self.makeDefaultParser()
+      self.provider = provider ?? FoodDataProviderFactory.make()
+    #endif
   }
 
   deinit {
     operation?.cancel()
+  }
+
+  private static func makeDefaultParser() -> any FoodDescriptionParsing {
+    FoodParserFactory.make()
+  }
+
+  /// Warms a fresh Foundation Models session when the logging surface appears.
+  /// Test and fallback parsers simply do not expose this optional capability.
+  func prewarmParser() async {
+    guard let prewarmingParser = parser as? any FoodDescriptionParserPrewarming else { return }
+    await prewarmingParser.prewarm()
   }
 
   func submit() {
@@ -128,10 +199,12 @@ final class LogViewModel: ObservableObject {
       skipNextUserTranscriptAppend = false
     } else {
       if stage == .completed {
-        // New log after save: clear the prior transcript first.
+        // New log after save: clear the prior transcript and meal time first.
         transcript = []
         lastSavedEntryID = nil
         lastSavedRecognizedFoodID = nil
+        consumedAt = .now
+        consumedAtInference = nil
       }
       appendUserTurn(text)
     }
@@ -139,6 +212,7 @@ final class LogViewModel: ObservableObject {
     // Capture `text` for the pipeline — do not re-read `input` after clearing.
     input = ""
 
+    beginInteractionTimeline()
     let generation = beginOperation()
     operation = Task { [weak self] in
       await self?.submitFlow(text: text, generation: generation)
@@ -157,15 +231,20 @@ final class LogViewModel: ObservableObject {
       lastSavedRecognizedFoodID = nil
     }
 
-    // Show the photo in the chat immediately (before model work).
-    appendUserTurn(captionOrNil ?? "", imageData: data)
-
+    beginInteractionTimeline()
     let generation = beginOperation()
+    // Show the photo bubble immediately; replace with the bounded representation after normalize.
+    let turnID = UUID()
+    transcript.append(.user(id: turnID, text: captionOrNil ?? "", imageData: data))
+    stage = .parsing
+    let normalizationTask = FoodImageNormalizer.task(for: data)
     operation = Task { [weak self] in
-      await self?.imageProposalFlow(
-        data: data, caption: captionOrNil, generation: generation)
+      await self?.preparedImageProposalFlow(
+        turnID: turnID,
+        normalizationTask: normalizationTask,
+        caption: captionOrNil,
+        generation: generation)
     }
-    await operation?.value
   }
 
   /// Surfaces a photo load/decode failure while keeping the text composer available.
@@ -177,10 +256,12 @@ final class LogViewModel: ObservableObject {
   func editUserMessage(id: UUID, newText: String) {
     let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
-    guard let index = transcript.firstIndex(where: { turn in
-      if case .user(let turnID, _, _) = turn { return turnID == id }
-      return false
-    }) else { return }
+    guard
+      let index = transcript.firstIndex(where: { turn in
+        if case .user(let turnID, _, _) = turn { return turnID == id }
+        return false
+      })
+    else { return }
 
     invalidateOperation()
     clearPipelineState()
@@ -196,6 +277,7 @@ final class LogViewModel: ObservableObject {
     skipNextUserTranscriptAppend = true
     // Keep composer empty while the edited bubble is the source of truth.
     input = ""
+    beginInteractionTimeline()
     let generation = beginOperation()
     operation = Task { [weak self] in
       await self?.submitFlow(text: trimmed, generation: generation)
@@ -203,6 +285,7 @@ final class LogViewModel: ObservableObject {
   }
 
   func searchManually() {
+    beginInteractionTimeline()
     let generation = beginOperation()
     operation = Task { [weak self] in
       await self?.manualSearchFlow(generation: generation)
@@ -210,6 +293,7 @@ final class LogViewModel: ObservableObject {
   }
 
   func select(_ result: FoodSearchResult) {
+    beginInteractionTimeline()
     let generation = beginOperation()
     selectedResult = result
     // Echo the pick as a short chat acknowledgment (not a debug "Selected …" line).
@@ -257,6 +341,7 @@ final class LogViewModel: ObservableObject {
     // Leave interpretationDraft until reparse completes so cancel still works.
     activeQuestion = nil
     message = nil
+    beginInteractionTimeline()
     let generation = beginOperation()
     operation = Task { [weak self] in
       await self?.clarificationReparseFlow(
@@ -267,7 +352,6 @@ final class LogViewModel: ObservableObject {
       )
     }
   }
-
 
   func chooseClarificationSuggestion(_ suggestion: String) {
     if stage == .clarifying {
@@ -373,15 +457,41 @@ final class LogViewModel: ObservableObject {
     }
   }
 
-  /// Advances from nutrition review: skip “when?” when timing was already clear in the log text.
-  /// From review, re-enter just the amount for the same food — no re-search.
-  func adjustQuantity() {
-    guard stage == .reviewing, compositeComponents.isEmpty, let details else { return }
+  /// From review/confirm, re-enter just the amount for the same USDA food — no re-search.
+  /// Composite meals keep multi-item amounts fixed (edit time only).
+  func editAmountFromReview() {
+    guard stage == .reviewing || stage == .confirming else { return }
+    guard compositeComponents.isEmpty, let details else { return }
     clarificationServings = ""
     clarificationGrams = ""
+    if resolution?.basis == .servings,
+      let multiplier = resolution?.servingMultiplier, multiplier > 0
+    {
+      clarificationServings = Self.formatQuantitySeed(multiplier)
+    } else if let grams = resolution?.consumedGrams, grams > 0 {
+      clarificationGrams = Self.formatQuantitySeed(grams)
+    }
     presentQuantityClarification(explanation: "How much did you have?", food: details)
   }
 
+  /// Backward-compatible alias for `editAmountFromReview()`.
+  func adjustQuantity() {
+    editAmountFromReview()
+  }
+
+  /// From review/confirm, re-open when-eaten with the current time label prefilled.
+  /// Keeps selected food, resolution, and nutrients intact.
+  func editTimeFromReview() {
+    guard stage == .reviewing || stage == .confirming else { return }
+    message = nil
+    let label = consumedAtInference?.displayLabel
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    whenEatenAnswer = label
+    stage = .whenEaten
+    appendSystemTurn("When did you eat this?")
+  }
+
+  /// Advances from nutrition review: skip “when?” when timing was already clear in the log text.
   func continueFromReview() {
     guard stage == .reviewing else { return }
     message = nil
@@ -390,7 +500,7 @@ final class LogViewModel: ObservableObject {
     refreshConsumedAtInference()
     if let inference = consumedAtInference, inference.isClear {
       consumedAt = inference.date
-      appendSystemTurn("Logged for \(inference.displayLabel.lowercased()).")
+      appendSystemTurn("Time set to \(inference.displayLabel.lowercased()).")
       stage = .confirming
       return
     }
@@ -398,6 +508,18 @@ final class LogViewModel: ObservableObject {
     whenEatenAnswer = ""
     stage = .whenEaten
     appendSystemTurn("When did you eat this?")
+  }
+
+  private static func formatQuantitySeed(_ value: Double) -> String {
+    if value.rounded() == value {
+      return String(Int(value))
+    }
+    // Prefer one decimal when the auto-default path produced a simple fraction.
+    let one = (value * 10).rounded() / 10
+    if one == value || abs(one - value) < 0.000_1 {
+      return String(format: "%g", one)
+    }
+    return String(format: "%g", value)
   }
 
   func applyWhenEatenSuggestion(_ text: String) {
@@ -409,25 +531,44 @@ final class LogViewModel: ObservableObject {
     guard stage == .whenEaten else { return }
     let text = whenEatenAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
     let display = text.isEmpty ? "Just now" : text
-    appendUserTurn(display)
 
     let resolved = MealTimeInferenceService.resolveAnswer(display)
+    guard resolved.wasParsed else {
+      message =
+        "I couldn’t understand that time. Try “8:30 pm,” “yesterday at 7,” or choose an exact date and time."
+      return
+    }
+
+    appendUserTurn(display)
     consumedAt = resolved.date
     consumedAtInference = MealTimeInference(
       date: resolved.date,
       displayLabel: resolved.displayLabel,
-      isClear: resolved.wasParsed
+      isClear: true
     )
-    if !resolved.wasParsed {
-      message = "Couldn’t parse that time — using now."
-    } else {
-      message = nil
-    }
+    message = nil
+    stage = .confirming
+  }
+
+  /// Uses the exact picker value as a deterministic remediation for free-form input.
+  func useSelectedWhenEatenDate() {
+    guard stage == .whenEaten else { return }
+    let label = consumedAt.formatted(date: .abbreviated, time: .shortened)
+    appendUserTurn(label)
+    consumedAtInference = MealTimeInference(date: consumedAt, displayLabel: label, isClear: true)
+    whenEatenAnswer = label
+    message = nil
     stage = .confirming
   }
 
   /// Applies clear meal-time cues from the original message onto review.
+  /// Preserves an already-clear inference (e.g. Siri/Shortcuts `consumedAt` handoff)
+  /// so when-eaten stays skipped and the external timestamp is not overwritten.
   func refreshConsumedAtInference() {
+    if let existing = consumedAtInference, existing.isClear {
+      consumedAt = existing.date
+      return
+    }
     let source = loggingSourceText
     let inference = MealTimeInferenceService.infer(from: source)
     consumedAtInference = inference
@@ -439,6 +580,7 @@ final class LogViewModel: ObservableObject {
   func presentReview() {
     refreshConsumedAtInference()
     stage = .reviewing
+    recordFirstActionableUIIfNeeded()
   }
 
   /// Installs confirmed multi-food components for a later composite save.
@@ -453,7 +595,8 @@ final class LogViewModel: ObservableObject {
         sourceText: source,
         components: compositeComponents
       )
-      let anyApproximate = draft.components.contains(where: \.isApproximate)
+      let anyApproximate =
+        draft.components.contains(where: \.isApproximate)
         || (parsed?.isApproximate == true)
       return try FoodLogEntryRecord(
         consumedAt: consumedAt,
@@ -558,7 +701,44 @@ final class LogViewModel: ObservableObject {
     pendingCompositeNames = []
     compositeSessionSource = ""
     activeCompositeComponent = nil
+    activeCompositeLookupSignature = nil
+    compositeRememberedChoices = []
     compositeSessionActive = false
+  }
+
+  /// Drops the active component after a failed match and continues the meal with remaining items.
+  /// Confirmed components are preserved.
+  func skipActiveCompositeComponent() {
+    guard compositeSessionActive else { return }
+    let skipped = activeCompositeComponent.map(CompositeMatchingProgress.displayLabel(for:)) ?? "item"
+    invalidateOperation()
+    activeCompositeComponent = nil
+    activeCompositeLookupSignature = nil
+    results = []
+    selectedResult = nil
+    details = nil
+    resolution = nil
+    nutrients = []
+    message = nil
+    failureKind = nil
+    appendSystemTurn("Skipped \(skipped).")
+    let generation = beginOperation()
+    if pendingCompositeNames.isEmpty {
+      if compositeComponents.isEmpty {
+        clearCompositeSession()
+        fail(.interpretation, message: "No foods were added to the meal.")
+      } else {
+        finishCompositeAssembly()
+      }
+    } else {
+      advanceCompositeQueue(generation: generation)
+    }
+  }
+
+  /// Whether recovery can skip the active composite component without discarding prior items.
+  var canSkipActiveCompositeComponent: Bool {
+    compositeSessionActive && activeCompositeComponent != nil
+      && (stage == .failed || stage == .choosing)
   }
 
   func cancel() {

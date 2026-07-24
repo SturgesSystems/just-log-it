@@ -117,3 +117,58 @@ import Testing
   let decoded = try JSONDecoder().decode([CompositeComponentSnapshot].self, from: data)
   #expect(decoded == [component])
 }
+
+@Test func compositeMatchingProgressReportsIndexAndTotal() {
+  let first = CompositeMatchingProgress.position(confirmedCount: 0, remainingAfterActive: 1)
+  #expect(first.index == 1)
+  #expect(first.total == 2)
+
+  let second = CompositeMatchingProgress.position(confirmedCount: 1, remainingAfterActive: 0)
+  #expect(second.index == 2)
+  #expect(second.total == 2)
+
+  let only = CompositeMatchingProgress.position(confirmedCount: 0, remainingAfterActive: 0)
+  #expect(only.index == 1)
+  #expect(only.total == 1)
+}
+
+@Test func compositeMatchingProgressMessagesIncludeNameAndOrdinal() {
+  #expect(
+    CompositeMatchingProgress.searchingMessage(componentLabel: "fries", index: 2, total: 2)
+      == "Matching fries (2 of 2)…"
+  )
+  #expect(
+    CompositeMatchingProgress.queueTurn(componentLabel: "  large fries ", index: 2, total: 2)
+      == "Matching large fries (2 of 2)."
+  )
+  #expect(
+    CompositeMatchingProgress.pickerCaption(componentLabel: "fries", index: 2, total: 2)
+      == "fries · 2 of 2"
+  )
+  #expect(
+    CompositeMatchingProgress.searchingMessage(componentLabel: "eggs", index: 1, total: 1)
+      == "Matching eggs…"
+  )
+}
+
+@Test func compositeMatchingProgressFailureKeepsConfirmedItemsInCopy() {
+  let withPrior = CompositeMatchingProgress.failureMessage(
+    componentLabel: "fries",
+    confirmedCount: 1,
+    detail: "No USDA foods matched."
+  )
+  #expect(withPrior.contains("Couldn’t match fries."))
+  #expect(withPrior.contains("No USDA foods matched."))
+  #expect(withPrior.contains("1 other item remains in this meal"))
+  #expect(withPrior.contains("skip this item"))
+
+  let firstOnly = CompositeMatchingProgress.failureMessage(
+    componentLabel: "eggs",
+    confirmedCount: 0,
+    detail: ""
+  )
+  #expect(firstOnly.contains("Couldn’t match eggs."))
+  #expect(firstOnly.contains("Edit the search"))
+  #expect(firstOnly.contains("skip this item"))
+  #expect(!firstOnly.contains("other item"))
+}

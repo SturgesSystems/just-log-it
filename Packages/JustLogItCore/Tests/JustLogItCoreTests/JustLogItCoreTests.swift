@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import JustLogItCore
@@ -38,6 +39,67 @@ import Testing
   let ranked = FoodSearchResultRanker().rank([salad, chicken], for: parsed)
 
   #expect(ranked.map(\.fdcID) == [11, 10])
+}
+
+@Test func plainCookedRiceOutranksRiceNoodlesForRiceRequest() {
+  let parsed = ParsedFoodRequest(
+    productName: "rice",
+    preparation: "cooked"
+  )
+  let noodles = FoodSearchResult(
+    fdcID: 12,
+    description: "RICE NOODLES, COOKED",
+    dataType: "Survey (FNDDS)"
+  )
+  let rice = FoodSearchResult(
+    fdcID: 13,
+    description: "RICE, WHITE, LONG-GRAIN, REGULAR, COOKED",
+    dataType: "Foundation"
+  )
+
+  let ranked = FoodSearchResultRanker().rank([noodles, rice], for: parsed)
+
+  #expect(ranked.map(\.fdcID) == [13, 12])
+}
+
+@Test func plainCookedRiceOutranksRiceNoodlesWhenJasmineQualifierIsUnavailable() {
+  let parsed = ParsedFoodRequest(
+    productName: "jasmine rice",
+    preparation: "cooked",
+    descriptors: ["plain"]
+  )
+  let noodles = FoodSearchResult(
+    fdcID: 14,
+    description: "RICE NOODLES, COOKED",
+    dataType: "Survey (FNDDS)"
+  )
+  let plainRice = FoodSearchResult(
+    fdcID: 15,
+    description: "RICE, WHITE, COOKED, NO SALT ADDED",
+    dataType: "Foundation"
+  )
+
+  let ranked = FoodSearchResultRanker().rank([noodles, plainRice], for: parsed)
+
+  #expect(ranked.map(\.fdcID) == [15, 14])
+}
+
+@Test func explicitRiceNoodleRequestStillPrefersRiceNoodles() {
+  let parsed = ParsedFoodRequest(productName: "rice noodles", preparation: "cooked")
+  let rice = FoodSearchResult(
+    fdcID: 16,
+    description: "RICE, WHITE, COOKED",
+    dataType: "Foundation"
+  )
+  let noodles = FoodSearchResult(
+    fdcID: 17,
+    description: "RICE NOODLES, COOKED",
+    dataType: "Survey (FNDDS)"
+  )
+
+  let ranked = FoodSearchResultRanker().rank([rice, noodles], for: parsed)
+
+  #expect(ranked.map(\.fdcID) == [17, 16])
 }
 
 @Test func explicitBrandAffectsRankingButAbsentBrandDoesNot() {
@@ -633,6 +695,119 @@ import Testing
   #expect(resolution.consumedGrams == 100)
 }
 
+@Test func twoLargeEggsResolveAgainstLargeEggPortionInsteadOfCup() {
+  let parsed = ParsedFoodRequest(
+    productName: "scrambled eggs",
+    quantity: 2,
+    unit: "eggs",
+    quantityText: "two large scrambled eggs",
+    preparation: "scrambled",
+    descriptors: ["large"]
+  )
+  let portions = [
+    USDAFoodPortion(
+      gramWeight: 220, amount: 1, portionDescription: "1 cup", measureUnitName: "cup"),
+    USDAFoodPortion(
+      gramWeight: 61, amount: 1, modifier: "large", portionDescription: "1 large egg"),
+    USDAFoodPortion(
+      gramWeight: 15, amount: 1, portionDescription: "1 tablespoon", measureUnitName: "tablespoon"),
+    USDAFoodPortion(
+      gramWeight: 44, amount: 1, modifier: "small", portionDescription: "1 small egg"),
+  ]
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked, scrambled",
+    dataType: "SR Legacy",
+    // The legacy default can still be the cup row; resolution must use all portions.
+    servingSize: 220,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    foodPortions: portions,
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 148)]
+  )
+
+  let outcome = ServingResolutionService().resolve(parsed, against: food)
+  guard case .resolved(let resolution) = outcome else {
+    Issue.record("Expected two large eggs to resolve, got \(outcome)")
+    return
+  }
+  #expect(resolution.consumedGrams == 122)
+  #expect(resolution.displayText == "two large scrambled eggs")
+}
+
+@Test func unsizedEggCountDoesNotGuessBetweenUSDAEggSizes() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs", quantity: 2, unit: "eggs", quantityText: "two eggs")
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked",
+    dataType: "SR Legacy",
+    servingSize: 220,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    foodPortions: [
+      USDAFoodPortion(gramWeight: 44, amount: 1, portionDescription: "1 small egg"),
+      USDAFoodPortion(gramWeight: 61, amount: 1, portionDescription: "1 large egg"),
+    ],
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 148)]
+  )
+
+  guard
+    case .needsClarification(let message) =
+      ServingResolutionService().resolve(parsed, against: food)
+  else {
+    Issue.record("Expected ambiguous egg sizes to require clarification")
+    return
+  }
+  #expect(message.contains("more than one matching size"))
+}
+
+@Test func extraLargeEggDoesNotCollapseToLargeQualifier() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs", quantity: 2, unit: "eggs", quantityText: "two extra large eggs")
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked",
+    dataType: "SR Legacy",
+    foodPortions: [
+      USDAFoodPortion(gramWeight: 61, amount: 1, modifier: "large", portionDescription: "1 egg"),
+      USDAFoodPortion(
+        gramWeight: 67, amount: 1, modifier: "extra large", portionDescription: "1 egg"),
+    ],
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 148)]
+  )
+
+  guard case .resolved(let resolution) = ServingResolutionService().resolve(parsed, against: food)
+  else {
+    Issue.record("Expected extra-large egg portion to resolve")
+    return
+  }
+  #expect(resolution.consumedGrams == 134)
+}
+
+@Test func eggCountNeverUsesGenericCupPortion() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs", quantity: 2, unit: "eggs", quantityText: "two eggs")
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked, scrambled",
+    dataType: "SR Legacy",
+    servingSize: 220,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    foodPortions: [
+      USDAFoodPortion(
+        gramWeight: 220, amount: 1, portionDescription: "1 cup", measureUnitName: "cup")
+    ],
+    nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 148)]
+  )
+
+  guard case .needsClarification = ServingResolutionService().resolve(parsed, against: food) else {
+    Issue.record("An egg count must not be multiplied by the gram weight of a cup")
+    return
+  }
+}
+
 @Test func oneHundredGramsResolvesWithPerHundredGramNutrients() {
   let parsed = ParsedFoodRequest(productName: "chicken", quantity: 100, unit: "g")
   let food = FoodDetails(
@@ -669,9 +844,8 @@ import Testing
   #expect(resolution.consumedGrams == 158)
 }
 
-@Test func bowlsResolveAsMultiplesOfTheGramServing() {
-  // "2 bowls" of a food whose household serving is a volume the bowl can't map
-  // to: falls through to the meal-vessel rule (N × listed gram serving).
+@Test func bowlsDoNotResolveAsMultiplesOfAnUnrelatedGramServing() {
+  // A bowl has no defined relationship to the listed cup serving.
   let parsed = ParsedFoodRequest(productName: "cereal", quantity: 2, unit: "bowls")
   let food = FoodDetails(
     fdcID: 8,
@@ -683,11 +857,10 @@ import Testing
     nutrientsPer100Grams: [NutrientAmount(key: .energy, amount: 357)]
   )
   let outcome = ServingResolutionService().resolve(parsed, against: food)
-  guard case .resolved(let resolution) = outcome else {
-    Issue.record("Expected 2 bowls → 80 g, got \(outcome)")
+  guard case .needsClarification = outcome else {
+    Issue.record("Expected an undefined bowl size to require clarification, got \(outcome)")
     return
   }
-  #expect(resolution.consumedGrams == 80)
 }
 
 @Test func cupOfStapleUsesCulinaryDensityWhenNoServingInfo() {
@@ -843,6 +1016,29 @@ import Testing
   #expect(resolved.householdServing == "1 bar")
 }
 
+@Test func foodDetailsCodableRetainsAllPortionsAndReadsLegacyCache() throws {
+  let details = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked",
+    dataType: "SR Legacy",
+    foodPortions: [
+      USDAFoodPortion(gramWeight: 220, amount: 1, portionDescription: "1 cup"),
+      USDAFoodPortion(gramWeight: 61, amount: 1, portionDescription: "1 large egg"),
+    ]
+  )
+  let encoded = try JSONEncoder().encode(details)
+  let decoded = try JSONDecoder().decode(FoodDetails.self, from: encoded)
+  #expect(decoded.foodPortions == details.foodPortions)
+
+  // Disk caches written before `foodPortions` existed must remain readable.
+  let legacyJSON = Data(
+    #"{"fdcID":2,"description":"Egg","dataType":"SR Legacy","nutrientsPer100Grams":[],"nutrientsPerServing":[]}"#
+      .utf8
+  )
+  let legacy = try JSONDecoder().decode(FoodDetails.self, from: legacyJSON)
+  #expect(legacy.foodPortions.isEmpty)
+}
+
 @Test func oneServingResolvesWhenPortionsMappedToServingGrams() {
   // App path: user taps "1 serving" after picking SR Big Mac details.
   let parsed = ParsedFoodRequest(
@@ -874,12 +1070,11 @@ import Testing
   #expect(request.searchTerms == "Big Mac")
 }
 
-@Test func quantityDefaultFillsOneServingWhenAmountMissing() {
+@Test func quantityDefaultPreservesMissingAmountWithoutSelectedFoodMetadata() {
   let bare = ParsedFoodRequest(productName: "Big Mac", searchTerms: "Big Mac")
   let filled = ParsedQuantityDefault.applyingDefaultIfNeeded(bare)
-  #expect(filled.quantity == 1)
-  #expect(filled.unit == "serving")
-  #expect(filled.quantityNeedsClarification == false)
+  #expect(filled.quantity == nil)
+  #expect(filled.unit == nil)
 
   let already = ParsedFoodRequest(
     productName: "eggs", searchTerms: "eggs", quantity: 2, unit: "large")
@@ -888,16 +1083,112 @@ import Testing
   #expect(kept.unit == "large")
 }
 
+@Test func simpleWrittenEggCountIsRecoveredWhenModelDropsIt() {
+  let parsed = ParsedFoodRequest(
+    productName: "scrambled eggs",
+    searchTerms: "scrambled eggs",
+    preparation: "scrambled",
+    descriptors: ["large"]
+  )
+
+  let recovered = ParsedQuantityRecovery.recoveringSimpleAmount(
+    in: parsed,
+    from: "Two large scrambled eggs"
+  )
+
+  #expect(recovered.quantity == 2)
+  #expect(UnitConversion.family(recovered.unit ?? "") == "egg")
+  #expect(recovered.quantityText == "two large scrambled eggs")
+}
+
+@Test func omittedEggCountRecoversThroughUSDAResolutionAndNutritionCalculation() throws {
+  let source = "Two large scrambled eggs"
+  let modelOutput = ParsedFoodRequest(
+    productName: "scrambled eggs",
+    searchTerms: "scrambled eggs",
+    preparation: "scrambled",
+    descriptors: ["large"]
+  )
+  let recovered = ParsedQuantityRecovery.recoveringSimpleAmount(
+    in: modelOutput,
+    from: source
+  )
+  let request = ParsedQuantityDefault.applyingDefaultIfNeeded(
+    recovered,
+    sourceText: source
+  )
+  let food = FoodDetails(
+    fdcID: 2,
+    description: "Egg, whole, cooked, scrambled",
+    dataType: "SR Legacy",
+    servingSize: 220,
+    servingSizeUnit: "g",
+    householdServing: "1 cup",
+    foodPortions: [
+      USDAFoodPortion(gramWeight: 220, amount: 1, portionDescription: "1 cup"),
+      USDAFoodPortion(gramWeight: 61, amount: 1, portionDescription: "1 large egg"),
+      USDAFoodPortion(gramWeight: 44, amount: 1, portionDescription: "1 small egg"),
+    ],
+    nutrientsPer100Grams: [
+      NutrientAmount(key: .energy, amount: 148),
+      NutrientAmount(key: .protein, amount: 10),
+    ]
+  )
+
+  #expect(request.quantity == 2)
+  #expect(UnitConversion.family(request.unit ?? "") == "egg")
+  #expect(request.unit != "serving")
+
+  guard case .resolved(let resolution) = ServingResolutionService().resolve(request, against: food)
+  else {
+    Issue.record("Expected recovered egg count to resolve against the large-egg portion")
+    return
+  }
+  #expect(resolution.basis == .grams)
+  #expect(resolution.consumedGrams == 122)
+
+  let nutrients = try NutritionCalculator().calculate(food: food, resolution: resolution)
+  #expect(abs((nutrients.first { $0.key == .energy }?.amount ?? 0) - 180.56) < 0.000_1)
+  #expect(abs((nutrients.first { $0.key == .protein }?.amount ?? 0) - 12.2) < 0.000_1)
+}
+
+@Test func explicitAmountThatCannotBeRecoveredNeverDefaultsToOneServing() {
+  let parsed = ParsedFoodRequest(productName: "eggs", searchTerms: "eggs")
+  let unresolved = ParsedQuantityRecovery.recoveringSimpleAmount(
+    in: parsed,
+    from: "Actually two eggs, not three"
+  )
+  let defaulted = ParsedQuantityDefault.applyingDefaultIfNeeded(
+    unresolved,
+    sourceText: "Actually two eggs, not three"
+  )
+
+  #expect(defaulted.quantity == nil)
+  #expect(defaulted.unit == nil)
+}
+
+@Test func simpleExplicitMassIsRecoveredDeterministically() {
+  let parsed = ParsedFoodRequest(productName: "salmon", searchTerms: "salmon")
+  let recovered = ParsedQuantityRecovery.recoveringSimpleAmount(
+    in: parsed,
+    from: "150 g grilled salmon"
+  )
+
+  #expect(recovered.quantity == 150)
+  #expect(recovered.unit == "g")
+  #expect(recovered.quantityText == "150 g")
+}
+
 @Test func autoSelectsMultiTokenProductMatchLikeBigMac() {
   let ranked = [
     FoodSearchResult(
-      fdcID: 2706916, description: "Big Mac (McDonalds)", dataType: "Survey (FNDDS)"),
+      fdcID: 2_706_916, description: "Big Mac (McDonalds)", dataType: "Survey (FNDDS)"),
     FoodSearchResult(
       fdcID: 1, description: "Macaroni salad", dataType: "Survey (FNDDS)"),
   ]
   let parsed = ParsedFoodRequest(productName: "Big Mac", searchTerms: "Big Mac")
   let pick = FoodSearchAutoSelect.highConfidencePick(ranked: ranked, for: parsed)
-  #expect(pick?.fdcID == 2706916)
+  #expect(pick?.fdcID == 2_706_916)
 }
 
 @Test func doesNotAutoSelectGenericSingleTokenFood() {
@@ -910,7 +1201,7 @@ import Testing
   #expect(pick == nil)
 }
 
-@Test func autoSelectsRememberedFdcEvenAmongSeveral() {
+@Test func rememberedFdcReordersButNeverAutoSelects() {
   let ranked = [
     FoodSearchResult(fdcID: 10, description: "Cookie dough", dataType: "Branded"),
     FoodSearchResult(fdcID: 99, description: "OREO cookie", dataType: "Branded"),
@@ -918,7 +1209,7 @@ import Testing
   let parsed = ParsedFoodRequest(productName: "cookie", searchTerms: "cookie")
   let pick = FoodSearchAutoSelect.highConfidencePick(
     ranked: ranked, for: parsed, preferredFdcIDs: [99])
-  #expect(pick?.fdcID == 99)
+  #expect(pick == nil)
 }
 
 @Test func compositeComponentRequestBareNameDefaultsToOneServing() {

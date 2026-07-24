@@ -14,6 +14,7 @@ struct ManualEntryView: View {
 
   @Environment(\.dismiss) private var dismiss
   @Environment(\.modelContext) private var modelContext
+  @Environment(\.usesVolatileStore) private var usesVolatileStore
   let onSaved: () -> Void
 
   @State private var name = ""
@@ -35,6 +36,17 @@ struct ManualEntryView: View {
   var body: some View {
     NavigationStack {
       Form {
+        if usesVolatileStore {
+          Section {
+            Label(
+              "Saving is unavailable because local storage didn’t open. Cancel and relaunch JustLogIt after fixing storage.",
+              systemImage: "externaldrive.badge.exclamationmark"
+            )
+            .foregroundStyle(.orange)
+            .accessibilityIdentifier("volatile-manual-warning")
+          }
+        }
+
         Section("Food") {
           TextField("Food name", text: $name)
             .submitLabel(.next)
@@ -81,7 +93,7 @@ struct ManualEntryView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save", action: save)
-            .disabled(!canSave)
+            .disabled(!canSave || usesVolatileStore)
             .accessibilityIdentifier("manual-save")
         }
         ToolbarItemGroup(placement: .keyboard) {
@@ -90,6 +102,7 @@ struct ManualEntryView: View {
           Button("Next", systemImage: "chevron.down") { moveFocus(by: 1) }
             .disabled(focusedField == Field.allCases.last)
           Spacer()
+          Button("Done") { focusedField = nil }
         }
       }
     }
@@ -133,6 +146,10 @@ struct ManualEntryView: View {
 
   private func save() {
     focusedField = nil
+    guard !usesVolatileStore else {
+      errorMessage = "Saving is unavailable because local storage didn’t open."
+      return
+    }
     guard let calorieValue = parseNonnegative(calories), validationMessage == nil else {
       errorMessage = "Calories must be a nonnegative number."
       return
@@ -157,10 +174,8 @@ struct ManualEntryView: View {
         calculationBasis: .manual,
         nutrients: nutrients
       )
-      modelContext.insert(entry)
-      let recognized = try RecognizedFoodRecord.upsert(from: entry, in: modelContext)
-      entry.recognizedFoodID = recognized.id
-      try modelContext.save()
+      // Same transactional save as confirmLog / future Siri intents.
+      _ = try FoodLogRepository(context: modelContext).save(entry)
       onSaved()
       dismiss()
       Task {

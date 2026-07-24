@@ -15,18 +15,58 @@ enum FoodDataError: LocalizedError, Equatable {
     case .notConfigured:
       "Food search is not configured yet. You can still enter nutrition manually."
     case .invalidRequest:
-      "That search could not be sent. Edit the terms and try again."
+      "That search could not be sent. Edit the terms and try again, or enter nutrition manually."
     case .invalidResponse:
-      "The food service returned information this version of JustLogIt could not read."
+      "The food service returned information this version of JustLogIt could not read. Enter nutrition manually if needed."
     case .unauthorized:
-      "The food service configuration was rejected."
+      "The food service configuration was rejected. You can still enter nutrition manually."
     case .notFound:
-      "That USDA food is no longer available."
+      "That USDA food is no longer available. Choose another result or enter nutrition manually."
     case .rateLimited(let retryAfter):
-      retryAfter.map { "Food search is temporarily rate-limited. Try again after \($0)." }
-        ?? "Food search is temporarily rate-limited. Try again later."
+      retryAfter.map {
+        "Food search is temporarily rate-limited. Try again after \($0), or enter nutrition manually."
+      }
+        ?? "Food search is temporarily rate-limited. Try again later, or enter nutrition manually."
     case .server:
-      "The food service is temporarily unavailable. Try again later."
+      "The food service is temporarily unavailable. Try again later, or enter nutrition manually."
+    }
+  }
+}
+
+/// Maps provider / transport failures to short recovery copy. Keeps URLError offline wording
+/// consistent without wrapping transport errors (contract: original URLError still propagates).
+enum FoodDataUserMessage {
+  static func searchFailure(_ error: any Error) -> String {
+    if let food = error as? FoodDataError, let description = food.errorDescription {
+      return description
+    }
+    switch AppObservability.usdaTransportOutcome(for: error) {
+    case .offline:
+      return
+        "You’re offline. Previously downloaded foods may still match from cache — or enter nutrition manually."
+    case .timedOut:
+      return "Food search timed out. Try again, or enter nutrition manually."
+    case .cancelled:
+      return "Food search was cancelled."
+    case .other:
+      return "Couldn’t reach USDA. Try again when you’re online, or enter nutrition manually."
+    }
+  }
+
+  static func detailsFailure(_ error: any Error) -> String {
+    if let food = error as? FoodDataError, let description = food.errorDescription {
+      return description
+    }
+    switch AppObservability.usdaTransportOutcome(for: error) {
+    case .offline:
+      return
+        "You’re offline. Previously downloaded food details may still open from cache — or enter nutrition manually."
+    case .timedOut:
+      return "Loading that food timed out. Try again, or enter nutrition manually."
+    case .cancelled:
+      return "Loading food details was cancelled."
+    case .other:
+      return "Couldn’t load that food. Try again when you’re online, or enter nutrition manually."
     }
   }
 }
@@ -58,7 +98,9 @@ private struct UnconfiguredFoodDataProvider: FoodDataProviding {
   func foodDetails(fdcID: Int) async throws -> FoodDetails { throw FoodDataError.notConfigured }
 }
 
-private actor USDAFoodDataProvider: FoodDataProviding {
+/// Internal so the app test target can exercise the real HTTP/DTO boundary through an
+/// injected `URLSession`. Production callers should continue to use `FoodDataProviderFactory`.
+actor USDAFoodDataProvider: FoodDataProviding {
   enum Endpoint: Sendable {
     case proxy(URL)
     #if DEBUG
@@ -68,11 +110,17 @@ private actor USDAFoodDataProvider: FoodDataProviding {
 
   private let endpoint: Endpoint
   private let session: URLSession
+  private let observer: AppObservability.USDAObserver
   private let decoder = JSONDecoder()
 
-  init(endpoint: Endpoint, session: URLSession = .shared) {
+  init(
+    endpoint: Endpoint,
+    session: URLSession = .shared,
+    observer: @escaping AppObservability.USDAObserver = AppObservability.recordUSDAEvent
+  ) {
     self.endpoint = endpoint
     self.session = session
+    self.observer = observer
   }
 
   func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
@@ -81,10 +129,16 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     }
     var urlRequest = try searchURLRequest(request)
     urlRequest.timeoutInterval = 12
-    let (data, response) = try await session.data(for: urlRequest)
+    let (data, response) = try await transport(
+      urlRequest, resource: .search, operation: .usdaSearchNetwork)
+    AppObservability.recordUSDAStatus(statusCategory(response))
     try validate(response)
     do {
-      return try decoder.decode(USDASearchResponseDTO.self, from: data).domain
+      let decoded = try AppObservability.measure(.usdaSearchDecode) {
+        try decoder.decode(USDASearchResponseDTO.self, from: data).domain
+      }
+      AppObservability.recordCount(.decodedSearchResults, .init(decoded.foods.count))
+      return decoded
     } catch {
       throw FoodDataError.invalidResponse
     }
@@ -94,10 +148,14 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     guard fdcID > 0 else { throw FoodDataError.invalidRequest }
     var urlRequest = try detailsURLRequest(fdcID: fdcID)
     urlRequest.timeoutInterval = 12
-    let (data, response) = try await session.data(for: urlRequest)
+    let (data, response) = try await transport(
+      urlRequest, resource: .details, operation: .usdaDetailNetwork)
+    AppObservability.recordUSDAStatus(statusCategory(response))
     try validate(response)
     do {
-      return try decoder.decode(USDAFoodDetailsDTO.self, from: data).domain
+      return try AppObservability.measure(.usdaDetailDecode) {
+        try decoder.decode(USDAFoodDetailsDTO.self, from: data).domain
+      }
     } catch {
       throw FoodDataError.invalidResponse
     }
@@ -134,6 +192,24 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     return result
   }
 
+  private func transport(
+    _ request: URLRequest,
+    resource: AppObservability.CacheResource,
+    operation: AppObservability.Operation
+  ) async throws -> (Data, URLResponse) {
+    do {
+      return try await AppObservability.measure(operation) {
+        try await session.data(for: request)
+      }
+    } catch {
+      observer(
+        .transport(
+          resource: resource,
+          outcome: AppObservability.usdaTransportOutcome(for: error)))
+      throw error
+    }
+  }
+
   private func detailsURLRequest(fdcID: Int) throws -> URLRequest {
     let url: URL
     switch endpoint {
@@ -152,7 +228,9 @@ private actor USDAFoodDataProvider: FoodDataProviding {
         url = built
     #endif
     }
-    return URLRequest(url: url)
+    var result = URLRequest(url: url)
+    result.httpMethod = "GET"
+    return result
   }
 
   private func validate(_ response: URLResponse) throws {
@@ -167,18 +245,132 @@ private actor USDAFoodDataProvider: FoodDataProviding {
     case 404:
       throw FoodDataError.notFound
     case 429:
-      throw FoodDataError.rateLimited(retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
+      throw FoodDataError.rateLimited(
+        retryAfter: sanitizedRetryAfter(http.value(forHTTPHeaderField: "Retry-After")))
     case 500...599:
       throw FoodDataError.server(status: http.statusCode)
     default:
       throw FoodDataError.invalidResponse
     }
   }
+
+  private func statusCategory(_ response: URLResponse) -> AppObservability.USDAStatusCategory {
+    guard let http = response as? HTTPURLResponse else { return .nonHTTP }
+    switch http.statusCode {
+    case 200..<300: return .success
+    case 400: return .invalidRequest
+    case 401, 403: return .unauthorized
+    case 404: return .notFound
+    case 429: return .rateLimited
+    case 500...599: return .serverError
+    default: return .otherHTTP
+    }
+  }
+
+  /// `Retry-After` is controlled by the upstream server. Reflect only normalized RFC values
+  /// into user-facing copy; arbitrary header text must never reach the UI.
+  private func sanitizedRetryAfter(_ value: String?) -> String? {
+    guard let value else { return nil }
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let seconds = Int(trimmed), (0...604_800).contains(seconds) {
+      return "\(seconds) second\(seconds == 1 ? "" : "s")"
+    }
+
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+    guard let date = formatter.date(from: trimmed) else { return nil }
+    return formatter.string(from: date)
+  }
+}
+
+/// Injectable filesystem mechanics keep cache-failure tests deterministic. None of these values
+/// cross the diagnostics boundary; production observations remain the closed `USDAEvent` enum.
+struct FoodDataCacheIO: Sendable {
+  let fileExists: @Sendable (URL) -> Bool
+  let read: @Sendable (URL) throws -> Data
+  let createDirectory: @Sendable (URL) throws -> Void
+  let write: @Sendable (Data, URL) throws -> Void
+  let contents: @Sendable (URL) throws -> [URL]
+  let modificationDate: @Sendable (URL) throws -> Date?
+  let remove: @Sendable (URL) throws -> Void
+
+  static let live = FoodDataCacheIO(
+    fileExists: { FileManager.default.fileExists(atPath: $0.path) },
+    read: { try Data(contentsOf: $0) },
+    createDirectory: {
+      try FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true)
+    },
+    write: { try $0.write(to: $1, options: .atomic) },
+    contents: {
+      try FileManager.default.contentsOfDirectory(
+        at: $0,
+        includingPropertiesForKeys: [.contentModificationDateKey],
+        options: [.skipsHiddenFiles])
+    },
+    modificationDate: {
+      try $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    },
+    remove: { try FileManager.default.removeItem(at: $0) }
+  )
 }
 
 actor DiskCachedFoodDataProvider: FoodDataProviding {
   /// Cache subdirectory name — shared so Settings' "Clear cache" targets the same place.
   static let cacheDirectoryName = "JustLogItFoodData"
+  /// Increment whenever cached domain objects gain semantics that older payloads
+  /// cannot represent safely. Versioning the filename makes incompatible entries
+  /// miss without deleting the shared cache directory or logged food data.
+  static let cacheSchemaVersion = 2
+
+  /// Default on-disk location for the disposable food cache (same path Settings clears).
+  static var defaultCacheDirectory: URL {
+    let base =
+      FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    return base.appending(path: cacheDirectoryName, directoryHint: .isDirectory)
+  }
+
+  /// Approximate byte size of cached search/detail files. Best-effort; never throws to callers.
+  static func approximateCacheByteCount(
+    at directory: URL = defaultCacheDirectory,
+    fileManager: FileManager = .default
+  ) -> Int64 {
+    guard fileManager.fileExists(atPath: directory.path) else { return 0 }
+    guard
+      let enumerator = fileManager.enumerator(
+        at: directory,
+        includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+        options: [.skipsHiddenFiles]
+      )
+    else { return 0 }
+
+    var total: Int64 = 0
+    for case let fileURL as URL in enumerator {
+      guard
+        let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+        values.isRegularFile == true
+      else { continue }
+      total += Int64(values.fileSize ?? 0)
+    }
+    return total
+  }
+
+  static func approximateCacheSizeDescription(
+    at directory: URL = defaultCacheDirectory,
+    fileManager: FileManager = .default
+  ) -> String {
+    let bytes = approximateCacheByteCount(at: directory, fileManager: fileManager)
+    guard bytes > 0 else { return "Empty" }
+    let formatter = ByteCountFormatter()
+    formatter.allowedUnits = [.useKB, .useMB]
+    formatter.countStyle = .file
+    formatter.includesUnit = true
+    formatter.isAdaptive = true
+    return "About \(formatter.string(fromByteCount: bytes))"
+  }
 
   private struct Envelope<Value: Codable & Sendable>: Codable, Sendable {
     let value: Value
@@ -189,6 +381,8 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
   private let directory: URL
   private let now: @Sendable () -> Date
   private let maxEntries: Int
+  private let io: FoodDataCacheIO
+  private let observer: AppObservability.USDAObserver
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
@@ -196,20 +390,16 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
     upstream: any FoodDataProviding,
     directory: URL? = nil,
     now: @escaping @Sendable () -> Date = { .now },
-    maxEntries: Int = 500
+    maxEntries: Int = 500,
+    io: FoodDataCacheIO = .live,
+    observer: @escaping AppObservability.USDAObserver = AppObservability.recordUSDAEvent
   ) {
     self.upstream = upstream
     self.now = now
     self.maxEntries = max(1, maxEntries)
-    if let directory {
-      self.directory = directory
-    } else {
-      let base =
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-        ?? FileManager.default.temporaryDirectory
-      self.directory = base.appending(
-        path: Self.cacheDirectoryName, directoryHint: .isDirectory)
-    }
+    self.io = io
+    self.observer = observer
+    self.directory = directory ?? Self.defaultCacheDirectory
   }
 
   func search(_ request: FoodSearchRequest) async throws -> FoodSearchResponse {
@@ -218,58 +408,183 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
       key:
         "\(request.normalizedKey)-\(request.page)-\(request.pageSize)-\(request.dataTypes.joined(separator: ","))"
     )
-    if let cached: FoodSearchResponse = read(url) { return cached }
-    let response = try await upstream.search(request)
-    write(response, to: url, ttl: response.foods.isEmpty ? 15 * 60 : 7 * 24 * 60 * 60)
-    return response
+    if let cached: FoodSearchResponse = read(url, resource: .search) {
+      return cached
+    }
+    do {
+      let response = try await upstream.search(request)
+      write(
+        response,
+        to: url,
+        resource: .search,
+        ttl: response.foods.isEmpty ? 15 * 60 : 7 * 24 * 60 * 60)
+      return response
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      if let stale: FoodSearchResponse = readStale(url, resource: .search) {
+        return stale
+      }
+      throw error
+    }
   }
 
   func foodDetails(fdcID: Int) async throws -> FoodDetails {
     let url = fileURL(kind: "details", key: String(fdcID))
-    if let cached: FoodDetails = read(url) { return cached }
-    let response = try await upstream.foodDetails(fdcID: fdcID)
-    write(response, to: url, ttl: 30 * 24 * 60 * 60)
-    return response
-  }
-
-  private func read<Value: Codable & Sendable>(_ url: URL) -> Value? {
-    guard let data = try? Data(contentsOf: url),
-      let envelope = try? decoder.decode(Envelope<Value>.self, from: data),
-      envelope.expiresAt > now()
-    else { return nil }
-    return envelope.value
-  }
-
-  private func write<Value: Codable & Sendable>(_ value: Value, to url: URL, ttl: TimeInterval) {
-    do {
-      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let envelope = Envelope(value: value, expiresAt: now().addingTimeInterval(ttl))
-      try encoder.encode(envelope).write(to: url, options: .atomic)
-      pruneIfNeeded()
-    } catch {
-      // Cache failure must never prevent a food lookup.
+    if let cached: FoodDetails = read(url, resource: .details) {
+      return cached
     }
+    do {
+      let response = try await upstream.foodDetails(fdcID: fdcID)
+      write(response, to: url, resource: .details, ttl: 30 * 24 * 60 * 60)
+      return response
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      if let stale: FoodDetails = readStale(url, resource: .details) {
+        return stale
+      }
+      throw error
+    }
+  }
+
+  private func read<Value: Codable & Sendable>(
+    _ url: URL,
+    resource: AppObservability.CacheResource
+  ) -> Value? {
+    switch loadEnvelope(Value.self, at: url, resource: resource) {
+    case .missing, .unreadable, .corrupt:
+      return nil
+    case .ready(let envelope):
+      guard envelope.expiresAt > now() else {
+        // Keep the file so a later upstream failure can still serve it offline.
+        observe(resource, .expired)
+        return nil
+      }
+      observe(resource, .hit)
+      return envelope.value
+    }
+  }
+
+  /// Serves an expired-but-decodable envelope after upstream failure (airplane mode / offline).
+  private func readStale<Value: Codable & Sendable>(
+    _ url: URL,
+    resource: AppObservability.CacheResource
+  ) -> Value? {
+    switch loadEnvelope(Value.self, at: url, resource: resource, recordMissing: false) {
+    case .missing, .unreadable, .corrupt:
+      return nil
+    case .ready(let envelope):
+      observe(resource, .stale)
+      return envelope.value
+    }
+  }
+
+  private enum EnvelopeLoad<Value: Codable & Sendable> {
+    case missing
+    case unreadable
+    case corrupt
+    case ready(Envelope<Value>)
+  }
+
+  private func loadEnvelope<Value: Codable & Sendable>(
+    _ type: Value.Type,
+    at url: URL,
+    resource: AppObservability.CacheResource,
+    recordMissing: Bool = true
+  ) -> EnvelopeLoad<Value> {
+    guard io.fileExists(url) else {
+      if recordMissing { observe(resource, .missing) }
+      return .missing
+    }
+
+    let data: Data
+    do {
+      data = try io.read(url)
+    } catch {
+      observe(resource, .readIO)
+      return .unreadable
+    }
+
+    do {
+      return .ready(try decoder.decode(Envelope<Value>.self, from: data))
+    } catch {
+      observe(resource, .corrupt)
+      removeInvalidEntry(at: url, resource: resource)
+      return .corrupt
+    }
+  }
+
+  private func write<Value: Codable & Sendable>(
+    _ value: Value,
+    to url: URL,
+    resource: AppObservability.CacheResource,
+    ttl: TimeInterval
+  ) {
+    do {
+      try io.createDirectory(directory)
+      let envelope = Envelope(value: value, expiresAt: now().addingTimeInterval(ttl))
+      try io.write(encoder.encode(envelope), url)
+    } catch {
+      observe(resource, .writeIO)
+      // Cache failure must never prevent a food lookup.
+      return
+    }
+    pruneIfNeeded(resource: resource)
   }
 
   /// Bounds on-disk growth: keep at most `maxEntries` files, evicting the
   /// least-recently-modified ones. Cheap common case — one directory listing;
   /// only reads modification dates when actually over the cap.
-  private func pruneIfNeeded() {
-    guard
-      let urls = try? FileManager.default.contentsOfDirectory(
-        at: directory, includingPropertiesForKeys: [.contentModificationDateKey],
-        options: [.skipsHiddenFiles]),
-      urls.count > maxEntries
-    else { return }
-
-    let modified: (URL) -> Date = {
-      (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-        ?? .distantPast
+  private func pruneIfNeeded(resource: AppObservability.CacheResource) {
+    let urls: [URL]
+    do {
+      urls = try io.contents(directory)
+    } catch {
+      observe(resource, .pruneIO)
+      return
     }
+    guard urls.count > maxEntries else { return }
+
+    let modified: (URL) -> Date = { self.pruneModificationDate($0, resource: resource) }
     let oldestFirst = urls.sorted { modified($0) < modified($1) }
     for url in oldestFirst.prefix(urls.count - maxEntries) {
-      try? FileManager.default.removeItem(at: url)
+      do {
+        try io.remove(url)
+      } catch {
+        observe(resource, .pruneIO)
+      }
     }
+  }
+
+  private func pruneModificationDate(
+    _ url: URL,
+    resource: AppObservability.CacheResource
+  ) -> Date {
+    do {
+      return try io.modificationDate(url) ?? .distantPast
+    } catch {
+      observe(resource, .pruneIO)
+      return .distantPast
+    }
+  }
+
+  private func removeInvalidEntry(
+    at url: URL,
+    resource: AppObservability.CacheResource
+  ) {
+    do {
+      try io.remove(url)
+    } catch {
+      observe(resource, .pruneIO)
+    }
+  }
+
+  private func observe(
+    _ resource: AppObservability.CacheResource,
+    _ outcome: AppObservability.CacheOutcome
+  ) {
+    observer(.cache(resource: resource, outcome: outcome))
   }
 
   private func fileURL(kind: String, key: String) -> URL {
@@ -277,7 +592,7 @@ actor DiskCachedFoodDataProvider: FoodDataProviding {
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "=", with: "")
-    return directory.appending(path: "\(kind)-\(safe).json")
+    return directory.appending(path: "v\(Self.cacheSchemaVersion)-\(kind)-\(safe).json")
   }
 }
 
@@ -346,11 +661,12 @@ private struct USDAFoodDetailsDTO: Decodable {
   var domain: FoodDetails {
     let per100Grams = NutrientMapper.canonicalize(foodNutrients ?? [])
     let labeledServing = labelNutrients?.domain ?? []
+    let portions = (foodPortions ?? []).map(\.domain)
     let resolved = FoodPortionServing.resolve(
       servingSize: servingSize,
       servingSizeUnit: servingSizeUnit,
       householdServing: householdServingFullText,
-      portions: (foodPortions ?? []).map(\.domain)
+      portions: portions
     )
     let perServing = NutrientMapper.mergedServingNutrients(
       label: labeledServing,
@@ -366,6 +682,7 @@ private struct USDAFoodDetailsDTO: Decodable {
       servingSize: resolved.servingSize,
       servingSizeUnit: resolved.servingSizeUnit,
       householdServing: resolved.householdServing,
+      foodPortions: portions,
       nutrientsPer100Grams: per100Grams,
       nutrientsPerServing: perServing,
       publicationDate: publicationDate
@@ -556,7 +873,7 @@ private enum NutrientMapper {
 
   static func normalize(key: NutrientKey, amount: Double, sourceUnit: String) -> NutrientAmount? {
     let source = sourceUnit.lowercased().replacingOccurrences(of: "μ", with: "µ")
-    let target = key.canonicalUnit
+    let target = key.canonicalUnit.lowercased()
     let converted: Double
     switch (source, target) {
     case ("kj", "kcal"): converted = amount / 4.184

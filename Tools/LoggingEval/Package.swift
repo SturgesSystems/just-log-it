@@ -4,8 +4,8 @@ import PackageDescription
 let package = Package(
   name: "LoggingEval",
   platforms: [
-    // Generable / Foundation Models APIs need 26.4+; host is macOS 27 beta.
-    .macOS(.v26)
+    // Usage metrics and capability-aware reasoning context options are macOS 27 APIs.
+    .macOS("27.0")
   ],
   products: [
     .executable(name: "logging-eval", targets: ["LoggingEval"])
@@ -19,6 +19,13 @@ let package = Package(
       dependencies: [
         .product(name: "JustLogItCore", package: "JustLogItCore")
       ]
-    )
+    ),
+    .testTarget(
+      name: "LoggingEvalTests",
+      dependencies: [
+        "LoggingEval",
+        .product(name: "JustLogItCore", package: "JustLogItCore"),
+      ]
+    ),
   ]
 )

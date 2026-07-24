@@ -70,6 +70,28 @@ extension LogView {
           model.whenEatenSuggestionChips,
           idPrefix: "when-eaten-suggestion"
         ) { model.applyWhenEatenSuggestion($0) }
+
+        if let message = model.message {
+          Label(message, systemImage: "exclamationmark.circle")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .accessibilityIdentifier("when-eaten-error")
+        }
+
+        Divider()
+        DatePicker(
+          "Exact date and time",
+          selection: $model.consumedAt,
+          displayedComponents: [.date, .hourAndMinute]
+        )
+        .datePickerStyle(.compact)
+        .accessibilityIdentifier("when-eaten-date-picker")
+
+        Button("Use this date and time") {
+          model.useSelectedWhenEatenDate()
+        }
+        .buttonStyle(.bordered)
+        .accessibilityIdentifier("use-when-eaten-date")
       }
     }
   }
@@ -88,6 +110,7 @@ extension LogView {
               .font(.caption)
               .foregroundStyle(.secondary)
           }
+          .accessibilityElement(children: .combine)
         }
 
         if let message = model.message {
@@ -132,10 +155,11 @@ extension LogView {
           VStack(alignment: .leading, spacing: 2) {
             Text("USDA matches")
               .font(.subheadline.weight(.semibold))
-            if let component = model.activeCompositeComponent {
-              Text(component)
+            if let caption = model.compositePickerCaption {
+              Text(caption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("composite-component-caption")
             }
           }
           Spacer(minLength: 8)
@@ -144,11 +168,16 @@ extension LogView {
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("usda-result-count")
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+          usdaPickerHeaderAccessibilityLabel
+        )
 
         HStack(spacing: 8) {
           Image(systemName: "magnifyingglass")
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
           TextField("Filter or re-search USDA…", text: $usdaFilter)
             .font(.subheadline)
             .textInputAutocapitalization(.never)
@@ -170,7 +199,10 @@ extension LogView {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 12))
+        .background(
+          Color(.tertiarySystemFill),
+          in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
 
         if !usdaFilter.isEmpty, displayedUSDAResults.isEmpty {
           Text("No local matches. Tap search to query USDA.")
@@ -195,13 +227,9 @@ extension LogView {
         .frame(maxHeight: 220)
         .scrollIndicators(.visible)
       }
-      .padding(12)
+      .padding(14)
       .frame(maxWidth: 360, alignment: .leading)
-      .background(ChatPalette.assistantFill, in: .rect(cornerRadius: 18))
-      .overlay {
-        RoundedRectangle(cornerRadius: 18)
-          .stroke(Color(.separator).opacity(0.35), lineWidth: 0.5)
-      }
+      .chatCardChrome()
       Spacer(minLength: 28)
     }
   }
@@ -234,15 +262,33 @@ extension LogView {
           }
         } else if let details = model.details, let resolution = model.resolution {
           VStack(alignment: .leading, spacing: 4) {
-            Text(details.description)
-              .font(.headline)
-            if let brand = details.brandOwner, !brand.isEmpty {
-              Text(brand)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(details.description)
+                .font(.headline)
+              if let brand = details.brandOwner, !brand.isEmpty {
+                Text(brand)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
             }
-            Label(resolution.displayText, systemImage: "scalemass")
+            .accessibilityElement(children: .combine)
+            Button {
+              model.editAmountFromReview()
+            } label: {
+              HStack(spacing: 6) {
+                Label(resolution.displayText, systemImage: "scalemass")
+                Image(systemName: "pencil")
+                  .font(.caption2.weight(.semibold))
+                  .foregroundStyle(.tertiary)
+                  .accessibilityHidden(true)
+              }
               .font(.subheadline)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Amount, \(resolution.displayText). Tap to edit.")
+            .accessibilityIdentifier("review-amount")
             if model.parsed?.isApproximate == true {
               Label("Approximate quantity", systemImage: "tilde")
                 .font(.caption)
@@ -252,15 +298,32 @@ extension LogView {
           MacroSummaryView(nutrients: model.nutrients)
         }
 
-        if let inference = model.consumedAtInference, inference.isClear {
-          Label(inference.displayLabel, systemImage: "clock")
+        Button {
+          model.editTimeFromReview()
+        } label: {
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Label(reviewTimeLabel, systemImage: "clock")
+              Image(systemName: "pencil")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            }
             .font(.subheadline)
             .foregroundStyle(.secondary)
-            .accessibilityIdentifier("review-consumed-at")
-          Text(model.consumedAt.formatted(date: .abbreviated, time: .shortened))
-            .font(.caption)
-            .foregroundStyle(.tertiary)
+            Text(model.consumedAt.formatted(date: .abbreviated, time: .shortened))
+              .font(.caption)
+              .foregroundStyle(.tertiary)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+          "Time, \(reviewTimeLabel), \(model.consumedAt.formatted(date: .abbreviated, time: .shortened)). Tap to edit."
+        )
+        .accessibilityIdentifier("review-consumed-at")
 
         if model.compositeComponents.isEmpty, let fdcID = model.details?.fdcID {
           Text("USDA FoodData Central · FDC \(fdcID)")
@@ -278,17 +341,34 @@ extension LogView {
         if model.compositeComponents.isEmpty {
           HStack(spacing: 16) {
             Button("Adjust amount") {
-              model.adjustQuantity()
+              model.editAmountFromReview()
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .accessibilityIdentifier("adjust-amount")
             Button("Choose a different food") {
               model.searchManually()
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
           }
           .font(.subheadline)
+        } else {
+          Text("Meal amounts are set per item — tap the time to change when you ate.")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
         }
       }
     }
+  }
+
+  /// Label for the review time row (prefers inference wording, else formatted clock).
+  var reviewTimeLabel: String {
+    if let inference = model.consumedAtInference {
+      let label = inference.displayLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !label.isEmpty { return label }
+    }
+    return model.consumedAt.formatted(date: .omitted, time: .shortened)
   }
 
   var confirmationCard: some View {
@@ -297,6 +377,16 @@ extension LogView {
         Text("Confirm this log?")
           .font(.subheadline.weight(.semibold))
           .accessibilityIdentifier("confirm-log-title")
+
+        if usesVolatileStore {
+          Label(
+            "This entry can’t be saved because local storage didn’t open. Your review is still here; relaunch after fixing storage.",
+            systemImage: "externaldrive.badge.exclamationmark"
+          )
+          .font(.caption)
+          .foregroundStyle(.orange)
+          .accessibilityIdentifier("volatile-confirmation-warning")
+        }
 
         if !model.compositeComponents.isEmpty {
           VStack(alignment: .leading, spacing: 12) {
@@ -308,31 +398,81 @@ extension LogView {
               .font(.caption.weight(.semibold))
               .foregroundStyle(.secondary)
             MacroSummaryView(nutrients: model.nutrients)
-            Label(
-              model.consumedAt.formatted(date: .abbreviated, time: .shortened),
-              systemImage: "clock"
+            Button {
+              model.editTimeFromReview()
+            } label: {
+              HStack(spacing: 6) {
+                Label(
+                  model.consumedAt.formatted(date: .abbreviated, time: .shortened),
+                  systemImage: "clock"
+                )
+                Image(systemName: "pencil")
+                  .font(.caption2.weight(.semibold))
+                  .foregroundStyle(.tertiary)
+                  .accessibilityHidden(true)
+              }
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+              "Time, \(model.consumedAt.formatted(date: .abbreviated, time: .shortened)). Tap to edit."
             )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
             .accessibilityIdentifier("confirm-consumed-at")
           }
         } else if let details = model.details, let resolution = model.resolution {
           VStack(alignment: .leading, spacing: 4) {
-            Text(details.description)
-              .font(.headline)
-            if let brand = details.brandOwner, !brand.isEmpty {
-              Text(brand)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(details.description)
+                .font(.headline)
+              if let brand = details.brandOwner, !brand.isEmpty {
+                Text(brand)
+                  .font(.caption)
+                  .foregroundStyle(.secondary)
+              }
             }
-            Label(resolution.displayText, systemImage: "scalemass")
+            .accessibilityElement(children: .combine)
+            Button {
+              model.editAmountFromReview()
+            } label: {
+              HStack(spacing: 6) {
+                Label(resolution.displayText, systemImage: "scalemass")
+                Image(systemName: "pencil")
+                  .font(.caption2.weight(.semibold))
+                  .foregroundStyle(.tertiary)
+                  .accessibilityHidden(true)
+              }
               .font(.subheadline)
-            Label(
-              model.consumedAt.formatted(date: .abbreviated, time: .shortened),
-              systemImage: "clock"
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Amount, \(resolution.displayText). Tap to edit.")
+            .accessibilityIdentifier("confirm-amount")
+            Button {
+              model.editTimeFromReview()
+            } label: {
+              HStack(spacing: 6) {
+                Label(
+                  model.consumedAt.formatted(date: .abbreviated, time: .shortened),
+                  systemImage: "clock"
+                )
+                Image(systemName: "pencil")
+                  .font(.caption2.weight(.semibold))
+                  .foregroundStyle(.tertiary)
+                  .accessibilityHidden(true)
+              }
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+              "Time, \(model.consumedAt.formatted(date: .abbreviated, time: .shortened)). Tap to edit."
             )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
             .accessibilityIdentifier("confirm-consumed-at")
           }
           MacroSummaryView(nutrients: model.nutrients)
@@ -350,13 +490,24 @@ extension LogView {
 
   var completionCard: some View {
     assistantCard {
-      VStack(alignment: .leading, spacing: 12) {
-        Label("Logged", systemImage: "checkmark.circle.fill")
-          .font(.headline)
-          .foregroundStyle(.green)
-        Text("Saved on this device.")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .center, spacing: 12) {
+          Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 28))
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.green)
+            .accessibilityHidden(true)
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Logged")
+              .font(.headline)
+            Text("Saved on this device.")
+              .font(.subheadline)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Logged. Saved on this device.")
+
         if let message = model.message {
           Text(message)
             .font(.caption)
@@ -370,20 +521,26 @@ extension LogView {
               Button {
                 onOpenEntry?(entryID)
               } label: {
-                Label("Entry", systemImage: "list.bullet.rectangle")
+                Label("View entry", systemImage: "list.bullet.rectangle")
+                  .lineLimit(1)
+                  .minimumScaleFactor(0.8)
+                  .frame(maxWidth: .infinity)
               }
               .buttonStyle(.bordered)
-              .controlSize(.small)
+              .controlSize(.regular)
               .accessibilityIdentifier("open-log-entry")
             }
             if let foodID = model.lastSavedRecognizedFoodID {
               Button {
                 onOpenFood?(foodID)
               } label: {
-                Label("Food", systemImage: "fork.knife")
+                Label("View food", systemImage: "fork.knife")
+                  .lineLimit(1)
+                  .minimumScaleFactor(0.8)
+                  .frame(maxWidth: .infinity)
               }
               .buttonStyle(.bordered)
-              .controlSize(.small)
+              .controlSize(.regular)
               .accessibilityIdentifier("open-food")
             }
           }
@@ -408,27 +565,124 @@ extension LogView {
           .frame(height: 0)
           .accessibilityIdentifier("status-message")
           .accessibilityHidden(true)
-        HStack(spacing: 12) {
-          Button(recoveryActionTitle) { performRecoveryAction() }
-            .font(.subheadline.weight(.medium))
-          Button("Enter manually") {
+        if model.failureKind == .interpretation,
+          !model.manualSearchTerms.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+          HStack(spacing: 10) {
+            Button("Search USDA", systemImage: "magnifyingglass") {
+              focusedField = nil
+              model.searchManually()
+            }
+            .buttonStyle(.borderedProminent)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityIdentifier("recovery-search-usda")
+
+            Button("Edit message", systemImage: "pencil") {
+              performRecoveryAction()
+            }
+            .buttonStyle(.bordered)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .accessibilityIdentifier("recovery-edit-message")
+          }
+          .controlSize(.small)
+
+          Button("Enter nutrition manually", systemImage: "square.and.pencil") {
             focusedField = nil
             model.showManualEntry = true
           }
           .font(.subheadline)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+          .accessibilityIdentifier("recovery-manual-entry")
+        } else {
+          // Airplane / offline / no-results: keep manual entry as a first-class CTA.
+          VStack(alignment: .leading, spacing: 10) {
+            Button(recoveryActionTitle) { performRecoveryAction() }
+              .font(.subheadline.weight(.medium))
+              .lineLimit(1)
+              .minimumScaleFactor(0.8)
+              .accessibilityIdentifier("recovery-primary-action")
+            Button("Enter nutrition manually", systemImage: "square.and.pencil") {
+              focusedField = nil
+              model.showManualEntry = true
+            }
+            .font(.subheadline.weight(.medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .accessibilityIdentifier("recovery-manual-entry")
+            if recoveryOffersSettings {
+              Button("Open Settings", systemImage: "gear") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                  UIApplication.shared.open(url)
+                }
+              }
+              .font(.subheadline.weight(.medium))
+              .accessibilityIdentifier("recovery-open-settings")
+            }
+          }
+        }
+
+        // Preserve already-confirmed meal items when one component fails to match.
+        if model.canSkipActiveCompositeComponent {
+          Button {
+            focusedField = nil
+            model.skipActiveCompositeComponent()
+          } label: {
+            Label(compositeSkipTitle, systemImage: "forward.fill")
+              .lineLimit(1)
+              .minimumScaleFactor(0.85)
+          }
+          .font(.subheadline)
+          .accessibilityIdentifier("composite-skip-component")
         }
       }
     }
   }
 
-  var recoveryTitle: String {
-    switch model.failureKind {
-    case .interpretation: "Couldn’t read that"
-    case .search: "Couldn’t reach USDA"
-    case .noResults: "No matches"
-    case .details: "Couldn’t load that food"
-    case nil: "Something went wrong"
+  var usdaPickerHeaderAccessibilityLabel: String {
+    var parts = ["USDA matches"]
+    if let caption = model.compositePickerCaption {
+      parts.append(caption)
     }
+    parts.append("\(displayedUSDAResults.count) of \(model.results.count)")
+    return parts.joined(separator: ", ")
+  }
+
+  var compositeSkipTitle: String {
+    if model.compositeComponents.isEmpty {
+      return model.pendingCompositeNames.isEmpty
+        ? "Skip this item"
+        : "Skip and continue meal"
+    }
+    if model.pendingCompositeNames.isEmpty {
+      return "Skip and finish meal"
+    }
+    return "Skip and continue meal"
+  }
+
+  var recoveryTitle: String {
+    if model.isBuildingComposite, model.activeCompositeComponent != nil {
+      switch model.failureKind {
+      case .search: return "Couldn’t look up that item"
+      case .noResults: return "No match for this item"
+      case .details: return "Couldn’t load that item"
+      case .interpretation, nil: break
+      }
+    }
+    switch model.failureKind {
+    case .interpretation: return "Couldn’t read that"
+    case .search: return "Couldn’t reach USDA"
+    case .noResults: return "No matches"
+    case .details: return "Couldn’t load that food"
+    case nil: return "Something went wrong"
+    }
+  }
+
+  /// Permission denials mention Settings so recovery can deep-link there.
+  var recoveryOffersSettings: Bool {
+    (model.message ?? "").localizedCaseInsensitiveContains("Settings")
   }
 
   var recoveryActionTitle: String {
@@ -442,6 +696,7 @@ extension LogView {
   func performRecoveryAction() {
     switch model.failureKind {
     case .interpretation, nil:
+      model.input = model.loggingSourceText
       model.cancel()
       focusedField = .composer
     case .search, .noResults:

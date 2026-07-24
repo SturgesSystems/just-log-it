@@ -41,20 +41,24 @@ public struct ClarificationPolicy: Sendable {
 
     // 2. Multi-food meal → composite (several USDA lookups, one log entry).
     // Prefer model componentNames; otherwise recover from source "X with Y" / "X and Y".
+    // Multi-item meals prefer composite over a model "which one?" prompt when we
+    // can name the parts — the product logs cereal+milk / eggs+bacon as one entry.
     if validated.turnCount < maxTurns {
       var components = Self.dedupedComponentNames(validated.componentNames)
-      // Recover components from source text only on the initial interpretation
-      // when the model was silent. An explicit model clarify prompt ("which
-      // one?") means ask the user; and once the user has answered a turn we must
-      // not re-split the original "X and Y" source into a composite.
+      // Recover components from source text only on the initial interpretation.
+      // After a user answer, do not re-split the original "X and Y" source.
+      // Model-confirmed single dishes (multipleFoodAssessment == .single) are never re-split.
       if components.count < 2, validated.turnCount == 0,
-        validated.modelClarificationPrompt == nil
+        validated.multipleFoodAssessment != .single
       {
         components = Self.dedupedComponentNames(
           Self.inferredComponents(from: validated.sourceText))
       }
       if components.count >= 2,
-        validated.containsMultipleFoods || Self.looksLikeMultiItemMeal(validated.sourceText)
+        validated.multipleFoodAssessment == .multiple
+          || (validated.multipleFoodAssessment == nil
+            && (validated.containsMultipleFoods
+              || Self.looksLikeMultiItemMeal(validated.sourceText)))
       {
         return .beginComposite(
           componentNames: components,
@@ -312,13 +316,15 @@ public struct ClarificationPolicy: Sendable {
   }
 
   /// Drop question-shaped or non-answer chips; never invent replacements.
-  private static func usableAnswerChips(_ suggestions: [String], for code: AmbiguityCode) -> [String]
+  private static func usableAnswerChips(_ suggestions: [String], for code: AmbiguityCode)
+    -> [String]
   {
     let nonFoodNoise: Set<String> = [
       "warm", "hot", "cold", "cooked", "raw", "yummy", "delicious", "tasty", "good", "great",
       "something", "food", "meal", "snack", "leftovers", "whatever", "idk", "n/a", "na",
     ]
-    return suggestions
+    return
+      suggestions
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { chip in
         guard !chip.isEmpty, chip.count <= 48 else { return false }

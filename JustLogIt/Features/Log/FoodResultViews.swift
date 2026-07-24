@@ -29,6 +29,12 @@ struct USDAResultRow: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: 12) {
+      // Soft selection affordance — reads as a tappable choice, not just text.
+      Image(systemName: "circle")
+        .font(.body.weight(.medium))
+        .foregroundStyle(Color.accentColor.opacity(0.55))
+        .accessibilityHidden(true)
+
       VStack(alignment: .leading, spacing: 4) {
         Text(result.displayDescription)
           .font(.subheadline.weight(.semibold))
@@ -53,12 +59,17 @@ struct USDAResultRow: View {
       Spacer(minLength: 0)
       Image(systemName: "chevron.right")
         .font(.caption.weight(.semibold))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.secondary)
         .accessibilityHidden(true)
     }
-    .padding(12)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 11)
     .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
     .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 12))
+    .overlay {
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .strokeBorder(Color.accentColor.opacity(0.12), lineWidth: 1)
+    }
     .contentShape(.rect)
     .accessibilityElement(children: .combine)
     .accessibilityHint("Selects this USDA food")
@@ -103,22 +114,38 @@ struct MacroSummaryView: View {
   let nutrients: [NutrientAmount]
   var showExtended: Bool = true
 
+  private let macroKeys: [NutrientKey] = [.protein, .carbohydrate, .totalFat]
   private let primaryKeys: [NutrientKey] = [.energy, .protein, .carbohydrate, .totalFat]
 
   var body: some View {
-    let primary = primaryKeys.compactMap { key in nutrients.first(where: { $0.key == key }) }
+    let energy = nutrients.first(where: { $0.key == .energy })
+    let macros = macroKeys.compactMap { key in nutrients.first(where: { $0.key == key }) }
     let remaining = nutrients.filter { !primaryKeys.contains($0.key) }
 
-    VStack(alignment: .leading, spacing: 12) {
-      if primary.isEmpty {
+    VStack(alignment: .leading, spacing: 10) {
+      if energy == nil, macros.isEmpty {
         Label("Nutrition unavailable", systemImage: "questionmark.circle")
           .font(.caption)
           .foregroundStyle(.secondary)
       } else {
-        HStack(alignment: .top, spacing: 8) {
-          ForEach(primary) { nutrient in
-            MacroValue(nutrient: nutrient)
-              .frame(maxWidth: .infinity)
+        // Calories lead; macros sit one tier below so energy is scannable first.
+        if let energy {
+          MacroValue(nutrient: energy, prominence: .hero)
+        }
+
+        if !macros.isEmpty {
+          LazyVGrid(
+            columns: [
+              GridItem(.flexible(), spacing: 8),
+              GridItem(.flexible(), spacing: 8),
+              GridItem(.flexible(), spacing: 8),
+            ],
+            alignment: .leading,
+            spacing: 8
+          ) {
+            ForEach(macros) { nutrient in
+              MacroValue(nutrient: nutrient, prominence: .secondary)
+            }
           }
         }
       }
@@ -135,23 +162,32 @@ struct MacroSummaryView: View {
 }
 
 private struct MacroValue: View {
+  enum Prominence {
+    case hero
+    case secondary
+  }
+
   let nutrient: NutrientAmount
+  var prominence: Prominence = .secondary
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: prominence == .hero ? 4 : 2) {
       Text(nutrient.key.displayName)
-        .font(.caption2)
+        .font(prominence == .hero ? .caption.weight(.semibold) : .caption2)
         .foregroundStyle(.secondary)
-        .lineLimit(1)
+        .lineLimit(2)
       Text(nutrient.formattedAmount)
-        .font(.subheadline.weight(.semibold))
+        .font(prominence == .hero ? .title3.weight(.bold) : .subheadline.weight(.semibold))
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .monospacedDigit()
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(8)
-    .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
+    .padding(prominence == .hero ? 12 : 8)
+    .background(
+      Color(.tertiarySystemFill),
+      in: .rect(cornerRadius: prominence == .hero ? 12 : 10)
+    )
     .accessibilityElement(children: .combine)
   }
 }
