@@ -65,7 +65,29 @@ public struct ServingResolutionService: Sendable {
         grams, food: food, display: parsed.quantityText ?? "\(format(quantity)) \(unit)")
     }
 
-    // 3) User volume + household volume + gram serving → exact scale for this food.
+    // 3) Resolve against the complete USDA portion list. A record's preferred/default
+    // serving may be `1 cup`, while another row is the user's exact `1 large egg`.
+    if let quantity = parsed.quantity, let unit = parsed.unit, !food.foodPortions.isEmpty {
+      switch FoodPortionServing.match(
+        userUnit: unit,
+        quantityText: parsed.quantityText,
+        descriptors: parsed.descriptors,
+        portions: food.foodPortions
+      ) {
+      case .matched(let portion, let portionAmount):
+        guard let grams = portion.gramWeight else { break }
+        let display = parsed.quantityText ?? "\(format(quantity)) \(unit)"
+        return resolveMass(grams * (quantity / portionAmount), food: food, display: display)
+      case .ambiguous:
+        return .needsClarification(
+          "USDA lists more than one matching size for this food. Choose a size or enter grams."
+        )
+      case .none:
+        break
+      }
+    }
+
+    // 4) User volume + household volume + gram serving → exact scale for this food.
     if let quantity = parsed.quantity, let unit = parsed.unit,
       UnitConversion.dimension(of: unit) == .volume,
       let household = householdAmount(food.householdServing),
@@ -82,20 +104,49 @@ public struct ServingResolutionService: Sendable {
       }
     }
 
-    // 4) User count/volume-as-count matches USDA household text (2 cookies vs "1 cookie").
+    // 5) User count/volume-as-count matches USDA household text (2 cookies vs "1 cookie").
     if let quantity = parsed.quantity, let unit = parsed.unit,
-      let household = householdAmount(food.householdServing),
-      UnitConversion.unitsCompatible(unit, household.unit)
+      let household = householdAmount(food.householdServing)
     {
-      let multiplier = quantity / household.amount
-      let display = parsed.quantityText ?? "\(format(quantity)) \(unit)"
-      if let oneServingG = servingGrams(food) {
-        return resolveMass(oneServingG * multiplier, food: food, display: display)
+      let requestedSizes = sizeTokens(
+        in: ([parsed.quantityText, parsed.unit] + parsed.descriptors.map(Optional.some))
+          .compactMap { $0 }
+          .joined(separator: " "))
+      let householdSizes = sizeTokens(in: food.householdServing ?? "")
+      if !requestedSizes.isEmpty, !householdSizes.isEmpty,
+        requestedSizes.isDisjoint(with: householdSizes)
+      {
+        return .needsClarification(
+          "USDA lists a different size for this food. Choose a matching size or enter grams."
+        )
       }
-      return validatedServings(multiplier, display: display, food: food)
+
+      let hasCompatibleHouseholdUnit = UnitConversion.unitsCompatible(unit, household.unit)
+      let hasMatchingSizeOnlyHousehold =
+        UnitConversion.dimension(of: unit) == .count
+        && !requestedSizes.isEmpty
+        && requestedSizes == householdSizes
+        && sizeTokens(in: household.unit) == householdSizes
+      if hasCompatibleHouseholdUnit || hasMatchingSizeOnlyHousehold {
+        let multiplier = quantity / household.amount
+        let display = parsed.quantityText ?? "\(format(quantity)) \(unit)"
+        if let oneServingG = servingGrams(food) {
+          return resolveMass(oneServingG * multiplier, food: food, display: display)
+        }
+        return validatedServings(multiplier, display: display, food: food)
+      }
     }
 
-    // 5) Fraction of a whole item matching household unit (⅜ pizza vs "¼ pizza").
+    // A bowl, plate, or glass is not a standard serving size. A matching USDA household
+    // measure already resolved above; otherwise ask rather than equating the vessel to one
+    // generic gram serving.
+    if let unit = parsed.unit, isMealVessel(unit) {
+      return .needsClarification(
+        "USDA does not define the size of that \(UnitConversion.family(unit)). Enter grams, cups, or servings."
+      )
+    }
+
+    // 6) Fraction of a whole item matching household unit (⅜ pizza vs "¼ pizza").
     if let fraction = parsed.fractionOfWhole, let whole = parsed.wholeUnit,
       let household = householdAmount(food.householdServing),
       UnitConversion.unitsCompatible(whole, household.unit)
@@ -108,35 +159,14 @@ public struct ServingResolutionService: Sendable {
       return validatedServings(multiplier, display: display, food: food)
     }
 
-    // 6) Explicit "N servings".
+    // 7) Explicit "N servings".
     if let quantity = parsed.quantity, let unit = parsed.unit,
       UnitConversion.dimension(of: unit) == .serving
     {
       return validatedServings(quantity, display: "\(format(quantity)) servings", food: food)
     }
 
-    // 7) Discrete count with gram serving and single-count household (or none).
-    if let quantity = parsed.quantity, let unit = parsed.unit,
-      UnitConversion.dimension(of: unit) == .count,
-      let oneServingG = servingGrams(food),
-      householdAmount(food.householdServing) == nil
-        || householdIsSingleCount(food.householdServing)
-    {
-      let display = parsed.quantityText ?? "\(format(quantity)) \(unit)"
-      return resolveMass(oneServingG * quantity, food: food, display: display)
-    }
-
-    // 8) "Bowl" (and similar meal vessels) ≈ N × listed household serving when we have grams.
-    if let quantity = parsed.quantity, let unit = parsed.unit,
-      ["bowl", "bowls", "plate", "plates", "glass", "glasses"].contains(
-        UnitConversion.family(unit)),
-      let oneServingG = servingGrams(food)
-    {
-      let display = parsed.quantityText ?? "\(format(quantity)) \(unit)"
-      return resolveMass(oneServingG * quantity, food: food, display: display)
-    }
-
-    // 9) Alternate quantity pair (e.g. "1 cup / 240 g").
+    // 8) Alternate quantity pair (e.g. "1 cup / 240 g").
     if let alternate = parsed.alternateQuantity, let alternateUnit = parsed.alternateUnit {
       var alternateParsed = parsed
       alternateParsed.quantity = alternate
@@ -146,7 +176,7 @@ public struct ServingResolutionService: Sendable {
       return resolve(alternateParsed, against: food)
     }
 
-    // 10) Volume without a volume household: approximate using culinary grams/cup for
+    // 9) Volume without a volume household: approximate using culinary grams/cup for
     // known staples. Never treat "1 pack (200 g)" as equal to 1 cup.
     if let quantity = parsed.quantity, let unit = parsed.unit,
       UnitConversion.dimension(of: unit) == .volume,
@@ -323,18 +353,28 @@ public struct ServingResolutionService: Sendable {
     return "an incomplete serving"
   }
 
-  private func householdIsSingleCount(_ text: String?) -> Bool {
-    guard let household = householdAmount(text) else { return false }
-    guard abs(household.amount - 1) < 0.001 else { return false }
-    switch UnitConversion.dimension(of: household.unit) {
-    case .count, .serving:
-      return true
-    case .mass, .volume:
-      return false
-    case .unknown:
-      // e.g. "1 McDonald's Big Mac" → unit "mcdonald's" is not a mass/volume measure.
-      return true
+  private func sizeTokens(in text: String) -> Set<String> {
+    let tokens =
+      text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+      .split { !$0.isLetter && !$0.isNumber }
+      .map(String.init)
+    var sizes = Set<String>()
+    for (index, token) in tokens.enumerated() {
+      switch token {
+      case "small", "medium", "jumbo":
+        sizes.insert(token)
+      case "large":
+        sizes.insert(index > 0 && tokens[index - 1] == "extra" ? "extra-large" : "large")
+      default:
+        continue
+      }
     }
+    return sizes
+  }
+
+  private func isMealVessel(_ unit: String) -> Bool {
+    let normalized = unit.lowercased().filter(\.isLetter)
+    return ["bowl", "bowls", "plate", "plates", "glass", "glasses"].contains(normalized)
   }
 
   private func format(_ value: Double) -> String {
@@ -350,7 +390,9 @@ public enum CulinaryDensity: Sendable {
   /// Grams per US cup for description keyword matches (first match wins).
   private static let gramsPerCupByKeyword: [(keywords: [String], grams: Double)] = [
     // Cooked rice (white/jasmine/basmati ~ USDA 158 g/cup cooked).
-    (["jasmine", "basmati", "cooked rice", "rice, cooked", "white rice", "brown rice", "rice"], 158),
+    (
+      ["jasmine", "basmati", "cooked rice", "rice, cooked", "white rice", "brown rice", "rice"], 158
+    ),
     (["oatmeal", "oats, cooked", "porridge"], 234),
     (["cooked pasta", "pasta, cooked", "spaghetti, cooked", "noodles, cooked"], 140),
     (["mashed potato", "potato, mashed"], 210),

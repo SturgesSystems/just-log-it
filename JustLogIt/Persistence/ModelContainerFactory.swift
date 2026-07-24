@@ -1,14 +1,12 @@
 import Foundation
 import SwiftData
 
-/// Builds the app ModelContainer with resilient recovery when the on-disk store
-/// cannot open after a schema change (common cause of a stuck launch screen).
+/// Builds the app ModelContainer without destroying an unreadable on-disk store.
+/// A migration or transient open failure falls back to a visibly volatile store;
+/// the original database remains available for a future migration or recovery.
 enum ModelContainerFactory {
   private static let appSupportSubdirectory = "JustLogIt"
   private static let storeFileName = "default.store"
-  /// Bump when adding models that cannot lightweight-migrate in place.
-  private static let schemaEpochKey = "justlogit.swiftdata.schemaEpoch"
-  private static let schemaEpoch = 2  // RecognizedFoodRecord + composite fields
 
   static var schema: Schema {
     Schema([
@@ -18,20 +16,26 @@ enum ModelContainerFactory {
     ])
   }
 
-  static func make(isUITesting: Bool) throws -> (container: ModelContainer, usesVolatileStore: Bool) {
+  static func make(
+    isUITesting: Bool,
+    persistentStoreURL: URL? = nil,
+    forceVolatileStore: Bool = false
+  ) throws -> (container: ModelContainer, usesVolatileStore: Bool) {
+    if forceVolatileStore {
+      let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+      let container = try ModelContainer(for: schema, configurations: [configuration])
+      return (container, true)
+    }
+
     if isUITesting {
       let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
       let container = try ModelContainer(for: schema, configurations: [configuration])
       return (container, false)
     }
 
-    // One-time wipe when the schema epoch advances. Avoids silent hang/black screen
-    // on devices whose on-disk store cannot open with the new models.
-    migrateSchemaEpochIfNeeded()
-
-    // 1) Prefer the normal on-disk store at an explicit URL (create parent dirs first).
+    // Prefer the normal on-disk store at an explicit URL (create parent dirs first).
     do {
-      let storeURL = try prepareStoreURL()
+      let storeURL = try persistentStoreURL ?? prepareStoreURL()
       let configuration = ModelConfiguration(
         schema: schema,
         url: storeURL,
@@ -40,24 +44,20 @@ enum ModelContainerFactory {
       let container = try ModelContainer(for: schema, configurations: [configuration])
       return (container, false)
     } catch {
-      // 2) Schema migration failure: wipe the local store once and retry.
-      destroyApplicationSupportStore()
-      do {
-        let storeURL = try prepareStoreURL()
-        let configuration = ModelConfiguration(
-          schema: schema,
-          url: storeURL,
-          cloudKitDatabase: .none
-        )
-        let container = try ModelContainer(for: schema, configurations: [configuration])
-        return (container, false)
-      } catch {
-        // 3) Last resort: volatile in-memory store so the app still launches.
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: schema, configurations: [configuration])
-        return (container, true)
-      }
+      // Preserve the failed store. Destructive recovery is never an acceptable
+      // response to an unidentified migration, file-protection, disk, or framework
+      // error. The persistent warning explains that new entries are temporary.
+      let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+      let container = try ModelContainer(for: schema, configurations: [configuration])
+      return (container, true)
     }
+  }
+
+  /// Last-resort construction used only when both the requested persistent store
+  /// and `make`'s ordinary in-memory fallback could not be opened.
+  static func makeEmergencyVolatile() throws -> ModelContainer {
+    let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+    return try ModelContainer(for: schema, configurations: [configuration])
   }
 
   /// Ensures Application Support / JustLogIt exists and returns the store file URL.
@@ -77,52 +77,76 @@ enum ModelContainerFactory {
     return directory.appending(path: storeFileName)
   }
 
-  private static func migrateSchemaEpochIfNeeded() {
-    let defaults = UserDefaults.standard
-    let current = defaults.integer(forKey: schemaEpochKey)
-    guard current < schemaEpoch else { return }
-    destroyApplicationSupportStore()
-    defaults.set(schemaEpoch, forKey: schemaEpochKey)
+}
+
+/// The complete value transferred from the background bootstrap worker to the
+/// main actor. SwiftData's SDK declaration makes `ModelContainer` itself
+/// `@unchecked Sendable`; this app does not add or broaden that conformance.
+struct ModelContainerBootstrapResult: Sendable {
+  let container: ModelContainer
+  let usesVolatileStore: Bool
+  let category: AppObservability.BootstrapStoreCategory
+}
+
+/// Runs every potentially blocking SwiftData open on a detached executor. The
+/// synchronous operation is injectable so scheduling and stale-result behavior
+/// can be tested without timing-dependent store migrations.
+struct ModelContainerBootstrapBuilder: Sendable {
+  typealias Operation =
+    @Sendable (AppLaunchArgumentPolicy.Mode) throws -> ModelContainerBootstrapResult
+
+  private let operation: Operation
+
+  init(operation: @escaping Operation = Self.liveOperation) {
+    self.operation = operation
   }
 
-  /// Removes the default SwiftData/application-support store files if present.
-  static func destroyApplicationSupportStore() {
-    let fileManager = FileManager.default
-    guard
-      let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        .first
-    else { return }
-
-    // Our store + any legacy locations SwiftData may have used.
-    let candidates = [
-      appSupport.appending(path: storeFileName),
-      appSupport.appending(path: appSupportSubdirectory, directoryHint: .isDirectory),
-      appSupport.appending(
-        path: Bundle.main.bundleIdentifier ?? "JustLogIt", directoryHint: .isDirectory),
-    ]
-
-    for url in candidates {
-      try? fileManager.removeItem(at: url)
-      // SQLite sidecars next to a file store.
-      if url.pathExtension == "store" {
-        try? fileManager.removeItem(at: URL(fileURLWithPath: url.path + "-shm"))
-        try? fileManager.removeItem(at: URL(fileURLWithPath: url.path + "-wal"))
-      }
+  func build(for mode: AppLaunchArgumentPolicy.Mode) async throws
+    -> ModelContainerBootstrapResult
+  {
+    let operation = self.operation
+    let worker = Task.detached(priority: .userInitiated) {
+      try operation(mode)
     }
 
-    // Also clear Default.store variants SwiftData uses.
-    if let contents = try? fileManager.contentsOfDirectory(
-      at: appSupport, includingPropertiesForKeys: nil)
-    {
-      for item in contents {
-        let name = item.lastPathComponent.lowercased()
-        if name.contains("default")
-          && (name.hasSuffix(".store") || name.contains("swiftdata") || name.hasSuffix("-shm")
-            || name.hasSuffix("-wal"))
-        {
-          try? fileManager.removeItem(at: item)
-        }
+    return try await withTaskCancellationHandler {
+      let result = try await worker.value
+      try Task.checkCancellation()
+      return result
+    } onCancel: {
+      worker.cancel()
+    }
+  }
+
+  private static func liveOperation(
+    _ mode: AppLaunchArgumentPolicy.Mode
+  ) throws -> ModelContainerBootstrapResult {
+    do {
+      let built = try ModelContainerFactory.make(
+        isUITesting: mode.isUITesting,
+        forceVolatileStore: mode.forcesVolatileStore
+      )
+      let category: AppObservability.BootstrapStoreCategory
+      if mode.forcesVolatileStore {
+        category = .forcedVolatile
+      } else if mode.isUITesting {
+        category = .testingMemory
+      } else if built.usesVolatileStore {
+        category = .fallbackVolatile
+      } else {
+        category = .persistent
       }
+      return ModelContainerBootstrapResult(
+        container: built.container,
+        usesVolatileStore: built.usesVolatileStore,
+        category: category
+      )
+    } catch {
+      return ModelContainerBootstrapResult(
+        container: try ModelContainerFactory.makeEmergencyVolatile(),
+        usesVolatileStore: true,
+        category: .emergencyVolatile
+      )
     }
   }
 }

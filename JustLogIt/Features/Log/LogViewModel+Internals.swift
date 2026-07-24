@@ -6,12 +6,46 @@ import SwiftUI
 // Internal pipeline for LogViewModel: interpretation, search, composite
 // assembly, resolution, and transcript/operation plumbing.
 extension LogViewModel {
+  func beginInteractionTimeline(at instant: ContinuousClock.Instant = .now) {
+    interactionTimeline = FoodLogInteractionTimeline(startedAt: instant)
+  }
+
+  func recordUSDARequestDispatchIfNeeded(at instant: ContinuousClock.Instant = .now) {
+    guard var timeline = interactionTimeline else { return }
+    let measurement = timeline.markUSDARequestDispatch(at: instant)
+    interactionTimeline = timeline
+    if let measurement {
+      AppObservability.recordMilestone(measurement.milestone, duration: measurement.duration)
+    }
+  }
+
+  func recordFirstActionableUIIfNeeded(at instant: ContinuousClock.Instant = .now) {
+    guard var timeline = interactionTimeline else { return }
+    let measurement = timeline.markFirstActionableUI(at: instant)
+    interactionTimeline = timeline
+    if let measurement {
+      AppObservability.recordMilestone(measurement.milestone, duration: measurement.duration)
+    }
+  }
+
   func appendUserTurn(_ text: String, imageData: Data? = nil) {
     transcript.append(.user(id: UUID(), text: text, imageData: imageData))
   }
 
   func appendSystemTurn(_ text: String) {
     transcript.append(.system(id: UUID(), text: text))
+  }
+
+  /// Replaces the image bytes on an existing user turn (optimistic photo → bounded prep).
+  func updateUserTurnImage(id: UUID, imageData: Data) {
+    guard let index = transcript.firstIndex(where: { $0.id == id }),
+      case .user(_, let text, _) = transcript[index]
+    else { return }
+    transcript[index] = .user(id: id, text: text, imageData: imageData)
+  }
+
+  func removeUserTurn(id: UUID) {
+    transcript.removeAll { $0.id == id }
   }
 
   func clearPipelineState() {
@@ -86,32 +120,51 @@ extension LogViewModel {
     message = nil
     failureKind = nil
     clearInterpretationClarification()
+    // A fresh interpretation must not inherit an abandoned multi-food session.
+    if compositeSessionActive { clearCompositeSession() }
     results = []
     selectedResult = nil
     details = nil
     resolution = nil
     nutrients = []
     whenEatenAnswer = ""
-    consumedAt = .now
+    // Keep a clear handoff time (Siri/Shortcuts consumedAt); otherwise start from now.
+    if consumedAtInference?.isClear != true {
+      consumedAt = .now
+    }
 
     let request: ParsedFoodRequest
     do {
-      let parsed = try await parser.parse(parseInput)
+      let terminalResolution: FoodInterpretationTerminalResolution
+      if let resolvingParser = parser as? any FoodDescriptionTerminalResolving {
+        terminalResolution = try await resolvingParser.resolveForApplication(
+          semanticContext: parseInput,
+          groundingText: evidenceText,
+          turnCount: turnCount
+        )
+      } else {
+        let parsed = try await parser.parse(
+          semanticContext: parseInput,
+          groundingText: evidenceText
+        )
+        terminalResolution = terminalResolver.resolve(
+          parsed,
+          sourceText: evidenceText,
+          evidenceKind: .typedText,
+          turnCount: turnCount,
+          searchRoute: .onDeviceSemantic
+        )
+      }
       guard isCurrentOperation(generation) else { return }
 
-      let draft = interpretationValidator.draft(
-        from: parsed,
-        sourceText: evidenceText,
-        evidenceKind: .typedText,
-        turnCount: turnCount
-      )
+      let draft = terminalResolution.draft
       interpretationDraft = draft
-      switch clarificationPolicy.decide(draft) {
+      switch terminalResolution.decision {
       case .proceed(let proceeded):
         self.parsed = proceeded
         manualSearchTerms = queryBuilder.build(from: proceeded).query
         request = proceeded
-        // No status log — the USDA picker is the next conversational beat.
+      // No status log — the USDA picker is the next conversational beat.
       case .beginComposite(let names, let sourceText):
         beginCompositeSession(componentNames: names, sourceText: sourceText, generation: generation)
         return
@@ -132,6 +185,9 @@ extension LogViewModel {
       return
     } catch {
       guard isCurrentOperation(generation) else { return }
+      // Preserve the user's text so the manual-search / recovery path isn't blank
+      // when the on-device model is unavailable or errors out.
+      manualSearchTerms = evidenceText
       let failureMessage =
         (error as? LocalizedError)?.errorDescription
         ?? "On-device interpretation wasn’t available. Edit the search terms or enter nutrition manually."
@@ -157,7 +213,12 @@ extension LogViewModel {
     resolution = nil
     nutrients = []
     whenEatenAnswer = ""
-    consumedAt = .now
+    // Keep a clear handoff time (Siri/Shortcuts consumedAt); otherwise start from now.
+    if consumedAtInference?.isClear != true {
+      consumedAt = .now
+    }
+    // A fresh interpretation must not inherit an abandoned multi-food session.
+    if compositeSessionActive { clearCompositeSession() }
 
     do {
       let proposed = try await imageProposer.propose(imageData: data, caption: caption)
@@ -165,15 +226,17 @@ extension LogViewModel {
 
       let sourceText = caption ?? proposed.productName
       input = sourceText
-      // Photo already appears in the transcript from proposeFromImage.
+      // Photo bubble was appended in proposeFromImage (then swapped to bounded bytes).
 
-      let draft = interpretationValidator.draft(
-        from: proposed,
+      let terminalResolution = terminalResolver.resolve(
+        proposed,
         sourceText: sourceText,
-        evidenceKind: .photoObservation
+        evidenceKind: .photoObservation,
+        searchRoute: .onDeviceSemantic
       )
+      let draft = terminalResolution.draft
       interpretationDraft = draft
-      switch clarificationPolicy.decide(draft) {
+      switch terminalResolution.decision {
       case .proceed(let proceeded):
         parsed = proceeded
         manualSearchTerms = queryBuilder.build(from: proceeded).query
@@ -200,6 +263,40 @@ extension LogViewModel {
       let failureMessage =
         (error as? FoodParserError)?.errorDescription
         ?? "Photo identification wasn’t available. Describe the food in text or enter nutrition manually."
+      fail(.interpretation, message: failureMessage)
+    }
+  }
+
+  /// Awaits the off-main image preparation task, then swaps the optimistic transcript photo for the
+  /// same bounded bytes the model receives. On cancel/supersede/failure the optimistic turn is
+  /// removed so multi-meg originals are not retained.
+  func preparedImageProposalFlow(
+    turnID: UUID,
+    normalizationTask: Task<Data, any Error>,
+    caption: String?,
+    generation: UInt
+  ) async {
+    do {
+      let preparedData = try await withTaskCancellationHandler {
+        try await normalizationTask.value
+      } onCancel: {
+        normalizationTask.cancel()
+      }
+      guard isCurrentOperation(generation) else {
+        removeUserTurn(id: turnID)
+        return
+      }
+      updateUserTurnImage(id: turnID, imageData: preparedData)
+      await imageProposalFlow(data: preparedData, caption: caption, generation: generation)
+    } catch is CancellationError {
+      removeUserTurn(id: turnID)
+      return
+    } catch {
+      removeUserTurn(id: turnID)
+      guard isCurrentOperation(generation) else { return }
+      let failureMessage =
+        (error as? LocalizedError)?.errorDescription
+        ?? "That photo could not be prepared. Describe the food in text instead."
       fail(.interpretation, message: failureMessage)
     }
   }
@@ -245,7 +342,8 @@ extension LogViewModel {
     sourceText: String,
     generation: UInt
   ) {
-    let names = componentNames
+    let names =
+      componentNames
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
     guard names.count >= 2 else {
@@ -255,6 +353,8 @@ extension LogViewModel {
     compositeSessionActive = true
     compositeSessionSource = sourceText
     compositeComponents = []
+    compositeRememberedChoices = []
+    activeCompositeLookupSignature = nil
     pendingCompositeNames = names
     let list = names.joined(separator: " · ")
     appendSystemTurn("I'll look up \(list) separately and put them in one log.")
@@ -277,11 +377,19 @@ extension LogViewModel {
     details = nil
     resolution = nil
     nutrients = []
-    let ordinal =
-      compositeComponents.isEmpty
-      ? "First"
-      : "Next"
-    appendSystemTurn("\(ordinal): \(next).")
+    message = nil
+    failureKind = nil
+    let position = CompositeMatchingProgress.position(
+      confirmedCount: compositeComponents.count,
+      remainingAfterActive: pendingCompositeNames.count
+    )
+    appendSystemTurn(
+      CompositeMatchingProgress.queueTurn(
+        componentLabel: next,
+        index: position.index,
+        total: position.total
+      )
+    )
     operation = Task { [weak self] in
       await self?.runSearch(for: request, generation: generation)
     }
@@ -290,6 +398,7 @@ extension LogViewModel {
   func finishCompositeAssembly() {
     compositeSessionActive = false
     activeCompositeComponent = nil
+    activeCompositeLookupSignature = nil
     pendingCompositeNames = []
     guard !compositeComponents.isEmpty else {
       fail(.interpretation, message: "No foods were added to the meal.")
@@ -327,6 +436,16 @@ extension LogViewModel {
       isApproximate: parsed?.isApproximate == true
     )
     compositeComponents.append(snap)
+    if let signature = activeCompositeLookupSignature, !signature.isEmpty, details.fdcID > 0 {
+      compositeRememberedChoices.append(
+        CompositeRememberedChoice(
+          lookupSignature: signature,
+          fdcID: details.fdcID,
+          displayName: details.description,
+          brand: details.brandOwner
+        )
+      )
+    }
     let generation = beginOperation()
     if pendingCompositeNames.isEmpty {
       finishCompositeAssembly()
@@ -349,6 +468,7 @@ extension LogViewModel {
       manualSearchTerms = sourceText
     }
     stage = .awaitingClarification
+    recordFirstActionableUIIfNeeded()
     appendSystemTurn(question.prompt)
   }
 
@@ -361,23 +481,28 @@ extension LogViewModel {
   }
 
   func runSearch(for request: ParsedFoodRequest, generation: UInt) async {
-    // Bare identity ("a Big Mac") → 1 serving so we can resolve without a quantity prompt.
-    let withQuantity = ParsedQuantityDefault.applyingDefaultIfNeeded(request)
+    let sourceText = loggingSourceText
+    let recovered = ParsedQuantityRecovery.recoveringSimpleAmount(in: request, from: sourceText)
+    // Keep missing quantity missing until selected USDA details prove that one
+    // serving has a safe basis. An explicit amount that could not be recovered
+    // also remains missing so post-USDA resolution can ask instead of guessing.
+    let withQuantity = ParsedQuantityDefault.applyingDefaultIfNeeded(
+      recovered,
+      sourceText: sourceText
+    )
     parsed = withQuantity
     do {
       try await search(
         queryBuilder.build(from: withQuantity),
         rankingIntent: withQuantity,
-        generation: generation
+        generation: generation,
+        allowsAutoSelection: true
       )
     } catch is CancellationError {
       return
     } catch {
       guard isCurrentOperation(generation) else { return }
-      fail(
-        .search,
-        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
-      )
+      fail(.search, message: FoodDataUserMessage.searchFailure(error))
     }
   }
 
@@ -398,35 +523,43 @@ extension LogViewModel {
     whenEatenAnswer = ""
     do {
       let rankingIntent = ParsedFoodRequest(productName: request.query, searchTerms: request.query)
-      try await search(request, rankingIntent: rankingIntent, generation: generation)
+      try await search(
+        request,
+        rankingIntent: rankingIntent,
+        generation: generation,
+        allowsAutoSelection: false
+      )
     } catch is CancellationError {
       return
     } catch {
       guard isCurrentOperation(generation) else { return }
-      fail(
-        .search,
-        message: (error as? LocalizedError)?.errorDescription ?? "Food search failed."
-      )
+      fail(.search, message: FoodDataUserMessage.searchFailure(error))
     }
   }
 
   func search(
     _ request: FoodSearchRequest,
     rankingIntent: ParsedFoodRequest,
-    generation: UInt
+    generation: UInt,
+    allowsAutoSelection: Bool
   ) async throws {
     stage = .searching
-    #if DEBUG
-      let response = try await AppPerformanceTrace.measure("USDA search") {
-        try await provider.search(request)
-      }
-    #else
+    if compositeSessionActive {
+      // Capture exactly the normalized lookup key used for this picker. USDA's display label can
+      // be materially different (for example, query "eggs" → "Egg, whole, cooked, scrambled").
+      activeCompositeLookupSignature = FoodLookupSignature.normalize(request.query)
+    }
+    recordUSDARequestDispatchIfNeeded()
+    let response = try await AppObservability.measure(.usdaSearchPipeline) {
       let response = try await provider.search(request)
-    #endif
+      return response
+    }
     guard isCurrentOperation(generation) else { return }
     let preferred = rememberedFoods.load().preferredFdcIDs(forQuery: request.query)
-    results = resultRanker.rank(
-      response.foods, for: rankingIntent, preferredFdcIDs: preferred)
+    results = AppObservability.measure(.usdaRanking) {
+      resultRanker.rank(response.foods, for: rankingIntent, preferredFdcIDs: preferred)
+    }
+    AppObservability.recordCount(.rankedSearchResults, .init(results.count))
     if results.isEmpty {
       fail(
         .noResults,
@@ -437,11 +570,13 @@ extension LogViewModel {
 
     // Strong identity (Big Mac, remembered pick, single clear hit) → skip the picker.
     // User can still choose a different food from review.
-    if let auto = FoodSearchAutoSelect.highConfidencePick(
-      ranked: results,
-      for: rankingIntent,
-      preferredFdcIDs: preferred
-    ) {
+    if allowsAutoSelection,
+      let auto = FoodSearchAutoSelect.highConfidencePick(
+        ranked: results,
+        for: rankingIntent,
+        preferredFdcIDs: preferred
+      )
+    {
       selectedResult = auto
       let label = auto.description.trimmingCharacters(in: .whitespacesAndNewlines)
       if !label.isEmpty {
@@ -452,20 +587,36 @@ extension LogViewModel {
     }
 
     stage = .choosing
+    recordFirstActionableUIIfNeeded()
   }
 
   func selectionFlow(_ result: FoodSearchResult, generation: UInt) async {
     stage = .loadingDetails
     message = nil
     do {
-      let details = try await provider.foodDetails(fdcID: result.fdcID)
+      let details = try await AppObservability.measure(.usdaDetailPipeline) {
+        try await provider.foodDetails(fdcID: result.fdcID)
+      }
       guard isCurrentOperation(generation) else { return }
       self.details = details
       // Default amount if still missing (manual pick without quantity in the parse).
+      let sourceText = loggingSourceText
       let request =
-        parsed.map { ParsedQuantityDefault.applyingDefaultIfNeeded($0) }
+        parsed.map {
+          let recovered = ParsedQuantityRecovery.recoveringSimpleAmount(
+            in: $0,
+            from: sourceText
+          )
+          return ParsedQuantityDefault.applyingDefaultIfNeeded(
+            recovered,
+            sourceText: sourceText,
+            selectedFood: details
+          )
+        }
         ?? ParsedQuantityDefault.applyingDefaultIfNeeded(
-          ParsedFoodRequest(productName: details.description, searchTerms: details.description)
+          ParsedFoodRequest(productName: details.description, searchTerms: details.description),
+          sourceText: sourceText,
+          selectedFood: details
         )
       parsed = request
       apply(resolver.resolve(request, against: details))
@@ -473,22 +624,40 @@ extension LogViewModel {
       return
     } catch {
       guard isCurrentOperation(generation) else { return }
-      fail(
-        .details,
-        message: (error as? LocalizedError)?.errorDescription
-          ?? "The selected food details could not be loaded."
-      )
+      fail(.details, message: FoodDataUserMessage.detailsFailure(error))
     }
   }
 
   func fail(_ kind: FailureKind, message: String) {
     clearInterpretationClarification()
     failureKind = kind
-    self.message = message
+    // Keep confirmed composite components; rephrase search/detail failures so recovery is clear.
+    let resolvedMessage: String
+    if compositeSessionActive,
+      let component = activeCompositeComponent,
+      kind == .search || kind == .noResults || kind == .details
+    {
+      let detail: String
+      switch kind {
+      case .noResults: detail = "No USDA foods matched."
+      case .search: detail = "USDA lookup failed."
+      case .details: detail = "Couldn’t load nutrition for that food."
+      case .interpretation: detail = message
+      }
+      resolvedMessage = CompositeMatchingProgress.failureMessage(
+        componentLabel: component,
+        confirmedCount: compositeComponents.count,
+        detail: detail
+      )
+    } else {
+      resolvedMessage = message
+    }
+    self.message = resolvedMessage
     stage = .failed
+    recordFirstActionableUIIfNeeded()
     // Single assistant bubble — the recovery card only offers actions, not a second copy.
-    if transcript.last?.text != message {
-      appendSystemTurn(message)
+    if transcript.last?.text != resolvedMessage {
+      appendSystemTurn(resolvedMessage)
     }
   }
 
@@ -499,6 +668,7 @@ extension LogViewModel {
         presentQuantityClarification(explanation: explanation, food: details)
       } else {
         stage = .clarifying
+        recordFirstActionableUIIfNeeded()
         message = explanation
         activeQuestion = ClarificationQuestion.quantity(explanation: explanation)
       }
@@ -553,6 +723,7 @@ extension LogViewModel {
     message = question.prompt
     failureKind = nil
     stage = .clarifying
+    recordFirstActionableUIIfNeeded()
     appendSystemTurn(question.prompt)
   }
 
@@ -560,13 +731,12 @@ extension LogViewModel {
   func rememberConfirmedSelectionIfPossible() {
     if !compositeComponents.isEmpty {
       var catalog = rememberedFoods.load()
-      for component in compositeComponents {
-        guard let fdcID = component.fdcID, fdcID > 0 else { continue }
+      for choice in compositeRememberedChoices {
         catalog.remember(
-          query: component.displayName,
-          fdcID: fdcID,
-          displayName: component.displayName,
-          brand: component.brand
+          query: choice.lookupSignature,
+          fdcID: choice.fdcID,
+          displayName: choice.displayName,
+          brand: choice.brand
         )
       }
       rememberedFoods.save(catalog)

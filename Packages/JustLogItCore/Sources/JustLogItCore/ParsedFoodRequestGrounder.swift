@@ -219,11 +219,14 @@ private struct SourceEvidence {
   }
 
   private static func tokens(_ text: String) -> [String] {
-    text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-      .split { character in
-        !character.isLetter && !character.isNumber && character != "/"
-      }
-      .map(String.init)
+    text.folding(
+      options: [.caseInsensitive, .diacriticInsensitive],
+      locale: Locale(identifier: "en_US_POSIX")
+    )
+    .split { character in
+      !character.isLetter && !character.isNumber && character != "/"
+    }
+    .map(String.init)
   }
 
   private static func tokensMatch(_ lhs: String, _ rhs: String) -> Bool {

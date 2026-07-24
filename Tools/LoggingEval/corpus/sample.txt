@@ -1,7 +1,16 @@
 # Sample corpus for logging-eval (one food description per line)
 # Lines starting with # are ignored.
 2 large eggs
+I just ate two eggs
+For breakfast I had two eggs
 1 cup cooked rice
 100 g chicken breast
 Oreo cookie
+McDonald's Big Mac
+half a 12-ounce can of Coke
+Quarter of a pizza
 banana
+1 banana for lunch
+About half a can of tuna
+Big Mac and fries
+two eggs and three strips of bacon

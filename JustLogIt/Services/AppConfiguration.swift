@@ -1,5 +1,75 @@
 import Foundation
 
+enum AppLaunchArgumentPolicy {
+  struct Mode: Sendable, Equatable {
+    let isUITesting: Bool
+    let forcesVolatileStore: Bool
+  }
+
+  static var current: Mode {
+    #if DEBUG
+      let arguments = ProcessInfo.processInfo.arguments
+      return Mode(
+        isUITesting: isUITesting(arguments: arguments, honorsDebugArguments: true),
+        forcesVolatileStore: forcesVolatileStore(
+          arguments: arguments,
+          honorsDebugArguments: true
+        )
+      )
+    #else
+      return Mode(isUITesting: false, forcesVolatileStore: false)
+    #endif
+  }
+
+  static func isUITesting(
+    arguments: [String],
+    honorsDebugArguments: Bool
+  ) -> Bool {
+    honorsDebugArguments && arguments.contains("-ui-testing")
+  }
+
+  static func forcesVolatileStore(
+    arguments: [String],
+    honorsDebugArguments: Bool
+  ) -> Bool {
+    honorsDebugArguments
+      && arguments.contains("-ui-testing")
+      && arguments.contains("-ui-testing-volatile-store")
+  }
+
+  /// UI-test-only pending food-log handoff text (simulates Siri / deep-link prefill).
+  ///
+  /// Requires `-ui-testing` and `-ui-pending-log`. Description comes from, in order:
+  /// 1. Environment `UI_PENDING_LOG_TEXT` (preferred when the text has spaces)
+  /// 2. The argument immediately after `-ui-pending-log` (must not start with `-`)
+  ///
+  /// Release builds always receive `nil` via `honorsDebugArguments: false`.
+  static func pendingFoodLogDescription(
+    arguments: [String],
+    environment: [String: String] = [:],
+    honorsDebugArguments: Bool
+  ) -> String? {
+    guard honorsDebugArguments,
+      isUITesting(arguments: arguments, honorsDebugArguments: true),
+      arguments.contains("-ui-pending-log")
+    else { return nil }
+
+    if let envText = environment["UI_PENDING_LOG_TEXT"]?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !envText.isEmpty
+    {
+      return envText
+    }
+
+    guard let flagIndex = arguments.firstIndex(of: "-ui-pending-log") else { return nil }
+    let valueIndex = arguments.index(after: flagIndex)
+    guard valueIndex < arguments.endIndex else { return nil }
+    let candidate = arguments[valueIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !candidate.isEmpty, !candidate.hasPrefix("-") else { return nil }
+    return candidate
+  }
+}
+
 struct AppConfiguration: Sendable {
   let proxyBaseURL: URL?
   #if DEBUG

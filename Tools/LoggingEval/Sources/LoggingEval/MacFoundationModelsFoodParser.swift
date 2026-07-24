@@ -3,9 +3,88 @@ import FoundationModels
 import JustLogItCore
 
 /// Mac-side copy of the app's Foundation Models food parser for evaluation.
-/// Uses the same production instructions, greedy sampling, and source grounding.
-@available(macOS 26.4, *)
-struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
+///
+/// The generated schema and prompt profiles intentionally mirror
+/// `JustLogIt/Services/FoundationModelsFoodParser.swift`. The LoggingEval test target
+/// contains a source-parity test so a shipping prompt/schema change cannot silently
+/// leave this standalone evaluator behind.
+@available(macOS 27.0, *)
+struct MacFoundationModelsFoodParser: EvaluatorBaselineFoodParsing, Sendable {
+  struct UsageMetrics: Sendable {
+    let inputTokenCount: Int
+    let cachedInputTokenCount: Int
+    let outputTokenCount: Int
+    let reasoningTokenCount: Int
+    let totalTokenCount: Int
+  }
+
+  struct ParseResult: Sendable {
+    let parsed: ParsedFoodRequest
+    let usage: UsageMetrics
+    /// Generation latency only. A prewarm requested by the evaluator happens
+    /// before this interval, matching the production app's submit-time timing.
+    let generationLatencyMilliseconds: Double
+    let prewarmLatencyMilliseconds: Double?
+  }
+
+  private static let promptPrefix = "Interpret this food description: "
+
+  enum PromptProfile: String, CaseIterable, Sendable {
+    case production
+    case leanCandidate
+
+    var instructions: String {
+      switch self {
+      case .production:
+        """
+        You are the food-log interpreter. Output structured fields for one principal food for a USDA database lookup, plus optional soft clarification for the user.
+
+        Facts only: never invent brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or a database record. Never invent a food name. Convert written numbers and fractions. For a fraction of a sized container (e.g. half a 12-ounce bottle), keep fractionOfWhole, wholeUnit, containerSize, and containerSizeUnit separate. An entire package is not automatically one serving. Strip 'I ate', mealtime, and 'please log' from search terms.
+
+        Identity first: productName must be a real food/product. If the message is only praise, vagueness, dismissal, or non-food chatter ("something yummy", "delicious", "who cares?", "idk", "whatever", "n/a", "a snack", "leftovers"), leave productName and searchTerms empty — never use those phrases as the food name. Do not set quantityNeedsClarification or preparationNeedsClarification until a real food is known.
+
+        Multi-food meals: when the person ate distinct items that each have their own USDA records (cereal with milk; eggs and toast; coffee with cream), set containsMultipleFoods true and fill componentNames with each item (e.g. cereal, milk). Do not invent components. A single named dish (pepperoni pizza, chicken burrito) is one food — not multi. When componentNames has 2+ items, leave clarificationPrompt empty so the app can log them as one multi-item entry.
+
+        Soft clarification: the app shows clarificationPrompt verbatim and blocks USDA search while it is non-empty. Write one natural chat question (no slash alternatives, no "Interpreted as…"). Gaps in order: (1) no food → ask only for the food name (tone-match); leave clarificationSuggestions empty; (2) multi without clear componentNames → which items; (3) food known, vague amount (a few/some) → how many/how much; (4) food known and prep would change USDA match but was not stated (classic: "three eggs" without scrambled/fried/boiled) → how cooked. Written numbers ("three") count as a concrete amount. Leave clarificationPrompt empty when ready for search or multi-component handoff.
+
+        Conversation replies: when the input includes an assistant question and a user reply, merge the reply into the interpretation. A dismissive or non-food reply is not a productName — ask again for the food instead of searching.
+        """
+      case .leanCandidate:
+        """
+        Extract foods for USDA lookup from explicit facts only. Never invent food/brand/quantity. Multi-item meals: containsMultipleFoods + componentNames (e.g. cereal, milk). Empty productName for non-food text. Flag missing prep when it changes lookup. Written counts are concrete. clarificationPrompt: one natural sentence; empty when multi-components are listed or ready for search.
+        """
+      }
+    }
+  }
+
+  enum ModelUseCase: String, CaseIterable, Sendable {
+    case general
+    case contentTagging
+
+    var systemUseCase: SystemLanguageModel.UseCase {
+      switch self {
+      case .general: .general
+      case .contentTagging: .contentTagging
+      }
+    }
+  }
+
+  /// Evaluator-only comparison dimension. Unlike the shipping Release app, this standalone tool
+  /// intentionally keeps both cases available so Release-built evaluation runs can compare them.
+  enum ReasoningPolicy: String, CaseIterable, Sendable {
+    case capabilityAwareLight
+    case disabled
+
+    func contextOptions(supportsReasoning: Bool) -> ContextOptions {
+      switch self {
+      case .capabilityAwareLight:
+        ContextOptions(reasoningLevel: supportsReasoning ? .light : nil)
+      case .disabled:
+        ContextOptions(reasoningLevel: nil)
+      }
+    }
+  }
+
   enum ParseError: Error, CustomStringConvertible {
     case emptyInput
     case unavailable(String)
@@ -30,13 +109,14 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
     var brand: String?
 
     @Guide(
-      description: "Concise product or food name without brand, quantity, or conversational filler."
+      description:
+        "Concise real food or product name only (e.g. eggs, oatmeal, pizza). Empty string when the person only gave praise, feelings, dismissal, or placeholders with no food (e.g. something yummy, delicious, who cares, idk, whatever, n/a, a snack, leftovers) — never invent a food, and never use those phrases as the product name."
     )
     var productName: String
 
     @Guide(
       description:
-        "Concise suggested food database search terms without quantity or conversational filler."
+        "Concise food database search terms without quantity or conversational filler. Empty when productName is empty."
     )
     var searchTerms: String
 
@@ -90,7 +170,8 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
 
     @Guide(
       description:
-        "Lookup descriptors such as flavor, crust type, variety, cut, size, fat percentage, or product line."
+        "Lookup descriptors such as flavor, crust type, variety, cut, size, fat percentage, or product line.",
+      .maximumCount(6)
     )
     var descriptors: [String]
 
@@ -102,13 +183,14 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
 
     @Guide(
       description:
-        "True when the input names more than one distinct food that should each get its own USDA lookup (e.g. cereal with milk)."
+        "True when the input names more than one distinct food that should each get its own USDA lookup (e.g. cereal with milk, eggs and toast, coffee with cream). False for a single dish name even if it has ingredients (e.g. pepperoni pizza)."
     )
     var containsMultipleFoods: Bool
 
     @Guide(
       description:
-        "When containsMultipleFoods is true, list each distinct food (e.g. cereal, milk). Empty when single food."
+        "When containsMultipleFoods is true, list each distinct food to look up separately, short names only (e.g. cereal, milk). Empty when a single food. Do not invent foods not present in the message.",
+      .maximumCount(8)
     )
     var componentNames: [String]
 
@@ -117,44 +199,57 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
 
     @Guide(
       description:
-        "True only when a real food is already identified AND the person did not state a concrete amount (or only said a few/some/several). False when productName is empty."
+        "True only when a real food is already identified AND the person did not state a concrete amount (or only said a few/some/several/a couple/a handful). False when productName is empty, and false when a definite number or fraction is present. Never invent a quantity."
     )
     var quantityNeedsClarification: Bool
 
     @Guide(
       description:
-        "True only when a real food is already identified AND preparation was not stated but would change lookup. False when productName is empty."
+        """
+        True only when a real food is already identified AND cook/preparation was not stated but would change which USDA record matches (e.g. eggs without scrambled/fried/boiled/poached; meat or potatoes without cooking method; raw vs cooked when both exist). False when productName is empty, when prep is already in the message, or when prep does not matter for lookup (e.g. banana, apple, branded packaged snack with a clear product name).
+        """
     )
     var preparationNeedsClarification: Bool
 
     @Guide(
       description:
         """
-        One natural chat question (single sentence, no slash alternatives). Empty only when ready for search.
-        Priority (first only): (1) no food → ask only for the food name (never prep/amount); (2) multiple foods → which one; (3) amount; (4) prep.
+        One natural user-facing question shown verbatim (a single sentence people would say in chat — never instruction-style alternatives like "What did you eat / what was it?"). Empty only when ready for USDA search.
+        Priority (first only — never skip ahead):
+        1) No real food named → ask only for the food name, matching tone (e.g. "I'm sure it was! What was it?"). Do NOT mention amount, prep, cooking, temperature, or container.
+        2) More than one distinct food → which one to log.
+        3) Food known, amount vague/missing when it matters → how much / how many.
+        4) Food known, prep missing when it changes lookup → how it was prepared.
         """
     )
     var clarificationPrompt: String?
 
     @Guide(
       description:
-        "Optional short answer chips (0–4), never questions. When productName is empty: must be empty array. When food known: e.g. '2 scrambled'."
+        """
+          Optional short tap-to-send *answers* (0–4), never questions and never ending with '?'.
+        When productName is empty (identity gap): leave this array EMPTY — the person should type the food name freeform. Do not suggest warm, cooked, delicious, yummy, or other non-food words.
+        When food is known: concrete answers only, e.g. "2 scrambled", "3 fried", "1 cup".
+        When multiple foods: short food names from the message only.
+        """,
+      .maximumCount(4)
     )
     var clarificationSuggestions: [String]
   }
 
-  /// Same production instruction text as the iOS app.
-  static let productionInstructions = """
-    You are the food-log interpreter. Output structured fields for one principal food for a USDA database lookup, plus optional soft clarification for the user.
+  private let promptProfile: PromptProfile
+  private let modelUseCase: ModelUseCase
+  private let reasoningPolicy: ReasoningPolicy
 
-    Facts only: never invent brand, package weight, restaurant size, pizza diameter, serving size, nutrients, or a database record. Never invent a food name. Convert written numbers and fractions. For a fraction of a sized container (e.g. half a 12-ounce bottle), keep fractionOfWhole, wholeUnit, containerSize, and containerSizeUnit separate. An entire package is not automatically one serving. Strip 'I ate', mealtime, and 'please log' from search terms.
-
-    Identity first: productName must be a real food/product. If the message is only praise, vagueness, dismissal, or non-food chatter ("something yummy", "delicious", "who cares?", "idk", "whatever", "n/a", "a snack", "leftovers"), leave productName and searchTerms empty. Do not set quantityNeedsClarification or preparationNeedsClarification until a real food is known.
-
-    Soft clarification: one natural chat question, first gap only. (1) no food → ask only for the food name; clarificationSuggestions empty; (2) multiple foods → which one; (3) vague amount (a few/some) → how many; written counts like "three" are concrete; (4) prep that changes USDA match and is missing (e.g. eggs without scrambled/fried/boiled) → how cooked, with cook-method chips. Never slash-style prompts or status phrases. Leave clarificationPrompt empty only when ready for search.
-
-    Conversation replies: merge user reply into interpretation. Dismissive/non-food replies are not productNames — ask again for the food.
-    """
+  init(
+    promptProfile: PromptProfile = .production,
+    modelUseCase: ModelUseCase = .general,
+    reasoningPolicy: ReasoningPolicy = .capabilityAwareLight
+  ) {
+    self.promptProfile = promptProfile
+    self.modelUseCase = modelUseCase
+    self.reasoningPolicy = reasoningPolicy
+  }
 
   static var isAvailable: Bool {
     if case .available = SystemLanguageModel.default.availability {
@@ -164,7 +259,18 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
   }
 
   static var availabilityDescription: String {
-    switch SystemLanguageModel.default.availability {
+    availabilityDescription(for: .general)
+  }
+
+  static func isAvailable(for useCase: ModelUseCase) -> Bool {
+    if case .available = SystemLanguageModel(useCase: useCase.systemUseCase).availability {
+      return true
+    }
+    return false
+  }
+
+  static func availabilityDescription(for useCase: ModelUseCase) -> String {
+    switch SystemLanguageModel(useCase: useCase.systemUseCase).availability {
     case .available:
       return "available"
     case .unavailable(.deviceNotEligible):
@@ -179,10 +285,24 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
   }
 
   func parse(_ input: String) async throws -> ParsedFoodRequest {
+    try await parseWithMetrics(input).parsed
+  }
+
+  static func contextOptions(
+    supportsReasoning: Bool,
+    reasoningPolicy: ReasoningPolicy = .capabilityAwareLight
+  ) -> ContextOptions {
+    reasoningPolicy.contextOptions(supportsReasoning: supportsReasoning)
+  }
+
+  func parseWithMetrics(
+    _ input: String,
+    warmState: ParserEvaluationWarmState = .cold
+  ) async throws -> ParseResult {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw ParseError.emptyInput }
 
-    let model = SystemLanguageModel.default
+    let model = SystemLanguageModel(useCase: modelUseCase.systemUseCase)
     switch model.availability {
     case .available:
       break
@@ -199,16 +319,41 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
     let session = LanguageModelSession(
       model: model,
       tools: [],
-      instructions: Self.productionInstructions
+      instructions: promptProfile.instructions
     )
+    let prewarmLatencyMilliseconds: Double?
+    if warmState == .prewarmed {
+      let started = ContinuousClock.now
+      session.prewarm(promptPrefix: Prompt(Self.promptPrefix))
+      prewarmLatencyMilliseconds = started.duration(to: .now).milliseconds
+    } else {
+      prewarmLatencyMilliseconds = nil
+    }
     let options = GenerationOptions(
       samplingMode: .greedy, temperature: 0, maximumResponseTokens: 500)
+    let contextOptions = Self.contextOptions(
+      supportsReasoning: model.capabilities.contains(.reasoning),
+      reasoningPolicy: reasoningPolicy)
+    let generationStarted = ContinuousClock.now
     let response = try await session.respond(
-      to: "Interpret this food description: \(trimmed)",
+      to: Self.promptPrefix + trimmed,
       generating: GeneratedFoodDescription.self,
-      options: options
+      options: options,
+      contextOptions: contextOptions
     )
-    return try map(response.content, originalInput: trimmed)
+    let generationLatencyMilliseconds = generationStarted.duration(to: .now).milliseconds
+    return try ParseResult(
+      parsed: map(response.content, originalInput: trimmed),
+      usage: UsageMetrics(
+        inputTokenCount: response.usage.input.totalTokenCount,
+        cachedInputTokenCount: response.usage.input.cachedTokenCount,
+        outputTokenCount: response.usage.output.totalTokenCount,
+        reasoningTokenCount: response.usage.output.reasoningTokenCount,
+        totalTokenCount: response.usage.totalTokenCount
+      ),
+      generationLatencyMilliseconds: generationLatencyMilliseconds,
+      prewarmLatencyMilliseconds: prewarmLatencyMilliseconds
+    )
   }
 
   private func map(
@@ -217,7 +362,9 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
   ) throws -> ParsedFoodRequest {
     let productName = generated.productName.trimmingCharacters(in: .whitespacesAndNewlines)
     let clarificationPrompt = cleaned(generated.clarificationPrompt)
-    if productName.isEmpty, clarificationPrompt == nil {
+    let components = generated.componentNames.compactMap(cleaned)
+    // Empty identity is valid when clarifying or handing off a multi-item meal.
+    if productName.isEmpty, clarificationPrompt == nil, components.count < 2 {
       throw ParseError.invalidResponse
     }
     let candidate = ParsedFoodRequest(
@@ -272,5 +419,13 @@ struct MacFoundationModelsFoodParser: FoodDescriptionParsing, Sendable {
   private func validFraction(_ value: Double?) -> Double? {
     guard let value, value.isFinite, value > 0, value <= 1 else { return nil }
     return value
+  }
+}
+
+extension Duration {
+  fileprivate var milliseconds: Double {
+    let components = self.components
+    return Double(components.seconds) * 1_000
+      + Double(components.attoseconds) / 1_000_000_000_000_000
   }
 }

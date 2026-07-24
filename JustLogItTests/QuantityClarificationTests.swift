@@ -73,7 +73,7 @@ final class QuantityClarificationTests: XCTestCase {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: timeout)
     while !condition(), clock.now < deadline {
-      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(2))
     }
     XCTAssertTrue(condition(), "Timed out waiting for expected state")
   }

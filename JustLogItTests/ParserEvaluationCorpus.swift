@@ -1,7 +1,8 @@
 import Foundation
+import JustLogItCore
 
 enum ParserEvaluationCorpus {
-  static let version = "1.0.0"
+  static let version = "1.4.0"
 
   static let cases: [ParserEvaluationCase] = [
     .init(
@@ -20,6 +21,34 @@ enum ParserEvaluationCorpus {
       id: "simple.salmon.mass", category: .simpleFood, input: "150 g grilled salmon",
       productTokens: ["salmon"], brand: .absent,
       amount: .quantity(150, units: ["g", "gram", "grams"]), disposition: .accept),
+    .init(
+      id: "siri.justAte.eggs", category: .simpleFood, input: "I just ate two eggs",
+      productTokens: ["eggs"], brand: .absent,
+      amount: .quantity(2, units: ["egg", "eggs"]), disposition: .accept),
+    .init(
+      id: "siri.breakfast.eggs", category: .simpleFood,
+      input: "For breakfast I had two eggs", productTokens: ["eggs"], brand: .absent,
+      amount: .quantity(2, units: ["egg", "eggs"]), disposition: .accept),
+    .init(
+      id: "siri.justFinished.banana", category: .simpleFood,
+      input: "I just finished a banana", productTokens: ["banana"], brand: .absent,
+      amount: .quantity(1, units: ["banana"]), disposition: .accept),
+    .init(
+      id: "siri.pleaseLog.halfPizza", category: .simpleFood,
+      input: "Please log half a pizza", productTokens: ["pizza"], brand: .absent,
+      amount: .fraction(0.5, wholeUnits: ["pizza"]), disposition: .accept),
+    .init(
+      id: "siri.banana.forLunch", category: .simpleFood, input: "1 banana for lunch",
+      productTokens: ["banana"], brand: .absent,
+      amount: .quantity(1, units: ["banana"]), disposition: .accept),
+    .init(
+      id: "siri.log.scrambledEggs", category: .simpleFood,
+      input: "Log two scrambled eggs", productTokens: ["eggs"], brand: .absent,
+      amount: .quantity(2, units: ["egg", "eggs"]), disposition: .accept),
+    .init(
+      id: "siri.justAte.bigMac", category: .brand, input: "I just ate a Big Mac",
+      productTokens: ["Big", "Mac"], brand: .absent, amount: .absent,
+      disposition: .clarify),
 
     .init(
       id: "brand.oreo.article", category: .brand, input: "An Oreo cookie",
@@ -42,6 +71,10 @@ enum ParserEvaluationCorpus {
       input: "One McDonald's Egg McMuffin", productTokens: ["Egg", "McMuffin"],
       brand: .exact("McDonald's"), amount: .quantity(1, units: ["mcmuffin", "sandwich"]),
       disposition: .accept),
+    .init(
+      id: "brand.bigmac.identity", category: .brand, input: "McDonald's Big Mac",
+      productTokens: ["Big", "Mac"], brand: .absent, amount: .absent,
+      disposition: .accept),
 
     .init(
       id: "quantity.mixed.numeric", category: .quantity,
@@ -57,6 +90,21 @@ enum ParserEvaluationCorpus {
       input: "Three eighths of a pizza", productTokens: ["pizza"], brand: .absent,
       amount: .fraction(0.375, wholeUnits: ["pizza"]), disposition: .accept),
     .init(
+      id: "quantity.fraction.quarter.pizza", category: .quantity,
+      input: "Quarter of a pizza", productTokens: ["pizza"], brand: .absent,
+      amount: .fraction(0.25, wholeUnits: ["pizza"]), disposition: .accept),
+    .init(
+      id: "quantity.fraction.container.coke", category: .quantity,
+      input: "half a 12-ounce can of Coke", productTokens: ["Coke"], brand: .absent,
+      amount: .fraction(
+        0.5, wholeUnits: ["can"], containerSize: 12, containerUnits: ["ounce", "oz"]),
+      disposition: .accept),
+    .init(
+      id: "quantity.approx.half.can.tuna", category: .quantity,
+      input: "About half a can of tuna", productTokens: ["tuna"], brand: .absent,
+      amount: .fraction(0.5, wholeUnits: ["can", "tuna"]), disposition: .accept,
+      expectsApproximation: true),
+    .init(
       id: "quantity.unit.alias", category: .quantity, input: "6 oz sirloin steak",
       productTokens: ["sirloin", "steak"], brand: .absent,
       amount: .quantity(6, units: ["oz", "ounce", "ounces"]), disposition: .accept),
@@ -65,6 +113,10 @@ enum ParserEvaluationCorpus {
       input: "Nearly two tablespoons olive oil", productTokens: ["olive", "oil"],
       brand: .absent, amount: .quantity(2, units: ["tablespoon", "tablespoons", "tbsp"]),
       disposition: .accept, expectsApproximation: true),
+    .init(
+      id: "quantity.unsafe.scoop", category: .quantity,
+      input: "2 scoops protein powder", productTokens: [], brand: .ignore,
+      amount: .ignore, disposition: .clarifyOrReject),
 
     .init(
       id: "multiple.eggs.toast", category: .multipleFood,
@@ -77,6 +129,22 @@ enum ParserEvaluationCorpus {
     .init(
       id: "multiple.coffee.cream", category: .multipleFood,
       input: "Coffee with two tablespoons of cream", productTokens: [], brand: .ignore,
+      amount: .ignore, disposition: .multipleOrReject),
+    .init(
+      id: "multiple.bigmac.fries", category: .multipleFood,
+      input: "Big Mac and fries", productTokens: [], brand: .ignore, amount: .ignore,
+      disposition: .multipleOrReject),
+    .init(
+      id: "multiple.eggs.bacon.strips", category: .multipleFood,
+      input: "two eggs and three strips of bacon", productTokens: [], brand: .ignore,
+      amount: .ignore, disposition: .multipleOrReject),
+    .init(
+      id: "multiple.eggs.toast.breakfast", category: .multipleFood,
+      input: "I had eggs and toast for breakfast", productTokens: [], brand: .ignore,
+      amount: .ignore, disposition: .multipleOrReject),
+    .init(
+      id: "multiple.eggs.bacon.breakfast", category: .multipleFood,
+      input: "eggs and bacon for breakfast", productTokens: [], brand: .ignore,
       amount: .ignore, disposition: .multipleOrReject),
 
     .init(
@@ -108,6 +176,14 @@ enum ParserEvaluationCorpus {
 
     .init(
       id: "ambiguous.some.rice", category: .ambiguous, input: "Some rice",
+      productTokens: ["rice"], brand: .absent, amount: .absent,
+      disposition: .clarify),
+    .init(
+      id: "ambiguous.plain.rice", category: .ambiguous, input: "rice",
+      productTokens: ["rice"], brand: .absent, amount: .absent,
+      disposition: .humanReview),
+    .init(
+      id: "ambiguous.bowl.rice", category: .ambiguous, input: "a bowl of rice",
       productTokens: ["rice"], brand: .absent, amount: .absent,
       disposition: .clarify),
     .init(
@@ -191,6 +267,48 @@ struct ParserEvaluationCase: Sendable {
   let amount: ParserAmountExpectation
   let disposition: ParserDisposition
   let expectsApproximation: Bool?
+
+  /// Authoritative terminal route expected from the target hybrid architecture. This is separate
+  /// from broad acceptance disposition: `.clarification`, `.manualSearch`, and `.composite` may all
+  /// block USDA, but substituting one for another is still a routing regression.
+  var expectedRoute: FoodInterpretationRoute {
+    switch id {
+    case "simple.apple.article", "simple.rice.cooked", "simple.eggs.written",
+      "simple.salmon.mass", "siri.justAte.eggs", "siri.breakfast.eggs",
+      "siri.justFinished.banana", "siri.pleaseLog.halfPizza", "siri.banana.forLunch",
+      "siri.log.scrambledEggs", "brand.oreo.article", "brand.bigmac.identity",
+      "quantity.mixed.numeric", "quantity.mixed.written", "quantity.fraction.written",
+      "quantity.fraction.quarter.pizza", "quantity.fraction.container.coke",
+      "quantity.unit.alias", "compound.pizza.slice", "context.oreo.after.milk",
+      "context.banana.after.pizza", "ambiguous.plain.rice", "binding.preposition",
+      "trap.plain.water", "trap.unsized.coffee":
+      .deterministicSearch
+
+    case "brand.chobani.serving", "brand.fairlife.container", "brand.restaurant",
+      "quantity.approx.half.can.tuna", "quantity.approximate",
+      "compound.turkey.sandwich", "compound.chicken.soup", "context.inline.correction",
+      "ambiguous.usual.yogurt", "trap.package":
+      .onDeviceSemantic
+
+    case "siri.justAte.bigMac", "ambiguous.some.rice", "ambiguous.bowl.rice",
+      "ambiguous.breakfast", "impossible.negative", "impossible.zero",
+      "impossible.huge", "binding.backward":
+      .clarification
+
+    case "quantity.unsafe.scoop", "nonfood.weather", "nonfood.poem", "nonfood.greeting",
+      "injection.ignore", "injection.schema", "injection.prior":
+      .manualSearch
+
+    case "multiple.eggs.toast", "multiple.dinner.plate", "multiple.coffee.cream",
+      "multiple.bigmac.fries", "multiple.eggs.bacon.strips",
+      "multiple.eggs.toast.breakfast", "multiple.eggs.bacon.breakfast",
+      "binding.cross.food":
+      .composite
+
+    default:
+      preconditionFailure("Parser corpus case \(id) has no authoritative expected route")
+    }
+  }
 
   init(
     id: String,

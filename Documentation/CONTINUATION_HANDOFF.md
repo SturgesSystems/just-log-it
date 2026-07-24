@@ -1,10 +1,13 @@
 # JustLogIt continuation handoff
 
-**Last updated:** 2026-07-13 (Grok / xAI session)  
-**Audience:** Next implementer with no access to the prior chat.  
-**Repo:** `/Users/james/Developer/just-log-it` · branch `main` · remote private GitHub.
+**Last updated:** 2026-07-18 (Siri multi-agent session)
+**Audience:** Next implementer with no access to the prior chat.
+**Repo:** `/Users/james/Developer/just-log-it` · branch `enhancements` · remote private GitHub.
 
-This document supersedes older handoff sections that claimed “never auto-select USDA,” “always ask quantity,” and incomplete composite/photo/HealthKit behavior. Those product rules **changed** in this session.
+> **Start here for the 2026-07-18 Siri/UI work:**
+> [`HANDOFF_2026-07-18_SIRI_UI.md`](HANDOFF_2026-07-18_SIRI_UI.md) · [`AGENT_CONTINUATION_2026-07-18.md`](AGENT_CONTINUATION_2026-07-18.md) · inventory [`SESSION_SHIPPED.md`](SESSION_SHIPPED.md)
+
+This document still covers durable product rules and earlier work (Big Mac portions, composites, HealthKit). Older claims of “never auto-select USDA” / “always ask quantity” were superseded in the 2026-07-13 session.
 
 ---
 
@@ -19,7 +22,7 @@ JustLogIt is a **privacy-first iOS food logger**. The person describes food in a
 | Item | Value |
 |------|--------|
 | Local path | `/Users/james/Developer/just-log-it` |
-| Branch | `main` (work directly on main; two-person project) |
+| Branch | `enhancements` (current session); older notes assumed `main` |
 | Xcode | `/Applications/Xcode-beta.app` (iOS 27 / Xcode 27 beta) |
 | Core package | `Packages/JustLogItCore` |
 | Mac eval harness | `Tools/LoggingEval` + `Scripts/run-logging-eval.sh` |
@@ -165,10 +168,13 @@ JustLogIt is a **privacy-first iOS food logger**. The person describes food in a
 | FM image | `JustLogIt/Services/FoundationModelsImageFoodProposer.swift` |
 | Health | `JustLogIt/Services/HealthKitNutritionWriter.swift`, `HealthSyncCoordinator.swift` |
 | Bootstrap | `JustLogIt/App/JustLogItApp.swift`, `Persistence/ModelContainerFactory.swift` |
+| Navigation / pending log | `JustLogIt/App/AppNavigation.swift`, `PendingFoodLog` |
+| Siri / App Intents (Spike A) | `JustLogIt/AppIntents/` — `StartFoodLogIntent`, `JustLogItShortcuts`, coordinators; consumes via `LogView.consumePendingFoodLog` |
 | Entries / meals | `JustLogIt/Features/Entries/EntriesView.swift` |
 | Core policy | `ClarificationPolicy.swift`, `ServingResolution.swift`, `FoodPortionServing.swift` |
 | Core defaults | `LoggingDefaults.swift`, `MealTimeInference.swift`, `CompositeComponentRequest.swift` |
 | Eval | `Tools/LoggingEval/**`, `Scripts/run-logging-eval.sh` |
+| Siri spike plan | `Documentation/SIRI_AI_INTEGRATION_SPIKE.md`, `Backlog/SiriAIIntegration.md` |
 | Docs | `Documentation/Performance.md`, `ParserEvaluation.md`, `Architecture.md`, this file |
 
 ---
@@ -231,17 +237,29 @@ Model never writes calories. Ranker never drops results. Auto-select only skips 
 
 ## 10. Suggested next work (priority)
 
-1. Rebaseline/fix **ClarificationPolicyTests** for composite multi-food.
-2. Simulator **manual UAT** of §5 paths; file UIBugs for anything sticky.
-3. Optional **edit amount / edit time** on review when inference was applied.
-4. HealthKit **on-device** permission + write smoke test.
-5. Consider **background ModelContainer** open if “Starting…” still feels long.
-6. Composite polish: fries size ranking, per-component failures.
+**Authoritative 2026-07-18 next list:** [`AGENT_CONTINUATION_2026-07-18.md`](AGENT_CONTINUATION_2026-07-18.md) §4.
+
+1. **Stabilize multi-agent tree:** `xcodegen generate` + `./Scripts/ci.sh` — fix compile/test fallout; then logical commits (nothing committed yet from the Siri session).
+2. **Spike A device gate:** physical Shortcuts + Siri UAT per [`ManualSiriAcceptance.md`](ManualSiriAcceptance.md). Code path largely present; exit gate open.
+3. **Siri Spike B:** extract shared `FoodLoggingWorkflow` from `LogViewModel`. `FoodLogRepository` already exists — workflow extract does **not**. Required before real Spike C.
+4. **Spike C:** leave `QuickLogFoodIntent` stub until B ships; no silent save.
+5. Rebaseline **ClarificationPolicyTests** for composite multi-food if still red.
+6. Simulator / device UAT of §5 happy paths; file `UIBugs.md` for sticky issues.
+7. HealthKit on-device permission + write smoke test.
+8. Composite polish: per-component failures, ranking edge cases.
 
 ---
 
-## 11. Session note for the next human/agent
+## 11. Session notes for the next human/agent
 
-This Grok session moved JustLogIt from “always ask match + amount + time” toward **confident defaults with override**, fixed **real Big Mac USDA data** via **foodPortions**, built **composite meals** with **per-item macros**, fixed **HealthKit Food correlation auth**, and tightened **chat/keyboard/photo** UX. Prefer measuring before “optimizing” the FM prompt (`Documentation/Performance.md`). Prefer surgical diffs. Prefer honesty over green tests that encode obsolete product rules.
+### 2026-07-13 (prior)
+
+Moved JustLogIt from “always ask match + amount + time” toward **confident defaults with override**, fixed **real Big Mac USDA data** via **foodPortions**, built **composite meals** with **per-item macros**, fixed **HealthKit Food correlation auth**, and tightened **chat/keyboard/photo** UX.
+
+### 2026-07-18 (this / latest)
+
+Large multi-agent push for **iOS 27 Siri App Intents Spike A** (foreground handoff), Entries **today nutrition** card, Settings Siri section, chat UI polish, deep links (`justlogit://log`), `FoodLogRepository`, and extensive docs. **Spike A code mostly on disk; device gate open; working tree uncommitted; re-verify build/tests before shipping.**
+
+Prefer measuring before “optimizing” the FM prompt (`Documentation/Performance.md`). Prefer surgical diffs. Prefer honesty over green tests that encode obsolete product rules.
 
 If something fails only on device with an old install: **clear food cache**, rebuild, re-test Big Mac before assuming portion mapping regressed.

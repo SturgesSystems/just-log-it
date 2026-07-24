@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import JustLogItCore
+import UniformTypeIdentifiers
 
 #if canImport(FoundationModels)
   import FoundationModels
@@ -11,7 +12,11 @@ import JustLogItCore
 ///
 /// Nutrition numbers are never produced. Quantity/brand are only taken from an
 /// explicit user caption or clearly visible packaging text — never invented from pixels alone.
-struct FoundationModelsImageFoodProposer: Sendable {
+protocol FoodImageProposing: Sendable {
+  func propose(imageData: Data, caption: String?) async throws -> ParsedFoodRequest
+}
+
+struct FoundationModelsImageFoodProposer: FoodImageProposing, Sendable {
   func propose(imageData: Data, caption: String? = nil) async throws -> ParsedFoodRequest {
     #if canImport(FoundationModels)
       return try await proposeWithFoundationModels(imageData: imageData, caption: caption)
@@ -30,6 +35,77 @@ struct FoundationModelsImageFoodProposer: Sendable {
         "On-device photo identification requires Foundation Models. Describe the food in text instead."
       )
     #endif
+  }
+}
+
+enum FoodImagePreparationError: LocalizedError {
+  case invalidImage
+  case couldNotCreateBoundedImage
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidImage:
+      "That photo could not be read. Choose another photo or describe the food in text."
+    case .couldNotCreateBoundedImage:
+      "That photo could not be prepared safely. Choose another photo or describe the food in text."
+    }
+  }
+}
+
+/// Produces the single bounded representation used by both the on-device model and transcript.
+/// ImageIO applies EXIF orientation while creating the thumbnail, and re-encoding strips source
+/// metadata. Work runs in a detached task so camera-sized image decoding never blocks SwiftUI.
+enum FoodImageNormalizer {
+  static let maximumPixelDimension = 1_280
+  static let maximumByteCount = 1_000_000
+
+  static func task(for sourceData: Data) -> Task<Data, any Error> {
+    Task.detached(priority: .userInitiated) {
+      try Task.checkCancellation()
+      let result = try normalizeSynchronously(sourceData)
+      try Task.checkCancellation()
+      return result
+    }
+  }
+
+  private static func normalizeSynchronously(_ sourceData: Data) throws -> Data {
+    guard !sourceData.isEmpty,
+      let source = CGImageSourceCreateWithData(
+        sourceData as CFData,
+        [kCGImageSourceShouldCache: false] as CFDictionary),
+      let thumbnail = CGImageSourceCreateThumbnailAtIndex(
+        source,
+        0,
+        [
+          kCGImageSourceCreateThumbnailFromImageAlways: true,
+          kCGImageSourceCreateThumbnailWithTransform: true,
+          kCGImageSourceThumbnailMaxPixelSize: maximumPixelDimension,
+          kCGImageSourceShouldCacheImmediately: true,
+        ] as CFDictionary)
+    else {
+      throw FoodImagePreparationError.invalidImage
+    }
+
+    // Encode the already-downsampled pixels at progressively smaller qualities. This does not
+    // decode or resize the source again, and guarantees the representation retained in memory
+    // stays below the transcript/model byte cap.
+    for quality in [0.82, 0.68, 0.52, 0.38, 0.25] {
+      let output = NSMutableData()
+      guard
+        let destination = CGImageDestinationCreateWithData(
+          output, UTType.jpeg.identifier as CFString, 1, nil)
+      else { throw FoodImagePreparationError.couldNotCreateBoundedImage }
+      CGImageDestinationAddImage(
+        destination,
+        thumbnail,
+        [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+      guard CGImageDestinationFinalize(destination) else {
+        throw FoodImagePreparationError.couldNotCreateBoundedImage
+      }
+      let data = output as Data
+      if data.count <= maximumByteCount { return data }
+    }
+    throw FoodImagePreparationError.couldNotCreateBoundedImage
   }
 }
 

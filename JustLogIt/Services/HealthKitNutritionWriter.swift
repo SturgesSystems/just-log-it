@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import JustLogItCore
+import OSLog
 
 enum HealthKitWriteError: LocalizedError {
   case unavailable
@@ -25,7 +26,36 @@ enum HealthKitWriteError: LocalizedError {
       return detail
     }
   }
+
+  /// Privacy-safe fragment for local logs (closed labels, not free-form food text).
+  var loggingDetail: String {
+    switch self {
+    case .unavailable: "unavailable"
+    case .noAuthorizedNutrients: "no_authorized_nutrients"
+    case .authorizationDisallowed(let detail):
+      if detail.localizedCaseInsensitiveContains("disallowed") { "disallowed" }
+      else if detail.isEmpty { "empty" }
+      else { "other" }
+    }
+  }
+
+  /// Maps HealthKit authorization failures (callback errors or ObjC exceptions) into a
+  /// user-visible error without crashing. Disallowed-share failures become a recovery message.
+  static func authorizationFailure(from detail: String) -> HealthKitWriteError {
+    .authorizationDisallowed(detail)
+  }
+
+  static func authorizationFailure(from error: Error) -> HealthKitWriteError {
+    if let writeError = error as? HealthKitWriteError { return writeError }
+    let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    return .authorizationDisallowed(detail)
+  }
 }
+
+private let healthKitWriterLogger = Logger(
+  subsystem: Bundle.main.bundleIdentifier ?? "JustLogIt",
+  category: "HealthKitWriter"
+)
 
 struct HealthAuthorizationSummary: Sendable, Equatable {
   let authorizedNutrientCount: Int
@@ -93,10 +123,15 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
       let once = Once(continuation)
       // HealthKit may throw NSException synchronously when the signed product is not
       // allowed to request write access (missing entitlement / simulator provisioning).
+      // Catch that ObjC exception so Settings/retry can show a recovery message instead of SIGABRT.
       let exception = JustLogItCatchException {
         self.store.requestAuthorization(toShare: shareTypes, read: []) { success, error in
           if let error {
-            once.resume(.failure(error))
+            let mapped = HealthKitWriteError.authorizationFailure(from: error)
+            healthKitWriterLogger.error(
+              "authorization_callback_failure detail=\(mapped.loggingDetail, privacy: .public)"
+            )
+            once.resume(.failure(mapped))
           } else if success {
             once.resume(.success(()))
           } else {
@@ -110,7 +145,11 @@ actor HealthKitNutritionWriter: HealthNutritionWriting {
       }
       if let exception {
         let reason = exception.reason ?? exception.name.rawValue
-        once.resume(.failure(HealthKitWriteError.authorizationDisallowed(reason)))
+        let mapped = HealthKitWriteError.authorizationFailure(from: reason)
+        healthKitWriterLogger.error(
+          "authorization_exception detail=\(mapped.loggingDetail, privacy: .public)"
+        )
+        once.resume(.failure(mapped))
       }
     }
     return authorizationSummary()
@@ -207,21 +246,19 @@ struct HealthKitNutrientMapping: Sendable {
     else { return nil }
     self.key = key
     quantityType = type
-    unit = Self.unit(for: key)
+    unit = Self.unit(forCanonicalUnit: key.canonicalUnit)
   }
 
   static var foodCorrelationType: HKCorrelationType? {
     HKObjectType.correlationType(forIdentifier: .food)
   }
 
-  /// Quantity types requested at permission time (constituents of a Food correlation).
-  /// Core macros first — keep the set bounded so Simulator/signing edge cases stay rare.
+  /// Every modeled USDA nutrient that HealthKit can represent. The writer already
+  /// filters individual samples by the person's authorization status, so the
+  /// initial request must include the same complete set the save path supports.
+  /// Food correlations are intentionally excluded — they are save-only, not share-auth.
   static var requestableShareTypes: [HKQuantityType] {
-    let preferred: [NutrientKey] = [
-      .energy, .protein, .carbohydrate, .totalFat, .saturatedFat, .fiber, .totalSugar,
-      .sodium, .cholesterol, .calcium, .iron, .potassium, .vitaminD, .vitaminC, .water,
-    ]
-    return preferred.compactMap { HealthKitNutrientMapping($0)?.quantityType }
+    allQuantityTypes
   }
 
   static var allQuantityTypes: [HKQuantityType] {
@@ -288,14 +325,25 @@ struct HealthKitNutrientMapping: Sendable {
     }
   }
 
-  private static func unit(for key: NutrientKey) -> HKUnit {
-    switch key.canonicalUnit {
-    case "kcal": .kilocalorie()
-    case "g": .gram()
-    case "mg": .gramUnit(with: .milli)
-    case "µg": .gramUnit(with: .micro)
-    case "mL": .literUnit(with: .milli)
-    default: .gram()  // fail soft — never crash the app on an unexpected unit string
+  /// Resolves a canonical nutrient unit string to an `HKUnit`. Unknown units fall back
+  /// to grams and log — never `preconditionFailure` / crash the save path.
+  static func unit(forCanonicalUnit unitString: String) -> HKUnit {
+    switch unitString {
+    case "kcal":
+      return HKUnit.kilocalorie()
+    case "g":
+      return HKUnit.gram()
+    case "mg":
+      return HKUnit.gramUnit(with: .milli)
+    case "µg":
+      return HKUnit.gramUnit(with: .micro)
+    case "mL":
+      return HKUnit.literUnit(with: .milli)
+    default:
+      healthKitWriterLogger.error(
+        "unexpected_nutrient_unit unit=\(unitString, privacy: .public) fallback=gram"
+      )
+      return HKUnit.gram()
     }
   }
 }

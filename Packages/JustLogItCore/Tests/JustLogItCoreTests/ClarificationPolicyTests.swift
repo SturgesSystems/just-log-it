@@ -136,7 +136,9 @@ import Testing
   #expect(names.joined(separator: " ").lowercased().contains("milk"))
 }
 
-@Test func multipleFoodsWithModelPromptClarifiesAndDoesNotProceed() {
+@Test func multipleFoodsWithModelPromptStillBeginsCompositeWhenSourceSplits() {
+  // "Which one?" model copy is obsolete for eggs-and-bacon style meals: product logs
+  // both as one composite entry when the source (or componentNames) names the parts.
   let parsed = ParsedFoodRequest(
     productName: "eggs and bacon",
     searchTerms: "eggs and bacon",
@@ -148,27 +150,29 @@ import Testing
     from: parsed,
     sourceText: "eggs and bacon"
   )
-  // Without componentNames, multi still needs a which-one / freeform clarify.
   let decision = ClarificationPolicy().decide(draft)
 
-  guard case .clarify(let question) = decision else {
-    Issue.record("Expected clarify for multiple foods without components, got \(decision)")
+  guard case .beginComposite(let names, let source) = decision else {
+    Issue.record("Expected beginComposite for eggs and bacon, got \(decision)")
     return
   }
-  #expect(question.code == .multipleFoods)
+  #expect(names.map { $0.lowercased() }.contains("eggs"))
+  #expect(names.map { $0.lowercased() }.contains("bacon"))
+  #expect(source.lowercased().contains("eggs"))
   #expect(draft.ambiguities.contains(.multipleFoods))
 }
 
 @Test func answeringMultipleFoodsSelectsSingleIdentity() {
+  // When multi-food cannot be split into components, the which-one clarify path remains.
   let parsed = ParsedFoodRequest(
-    productName: "eggs and bacon",
+    productName: "mixed plate",
     containsMultipleFoods: true,
     clarificationPrompt: "Which one?",
     clarificationSuggestions: ["eggs", "bacon"]
   )
-  let draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "eggs and bacon")
+  let draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "mixed plate")
   guard case .clarify(let question) = ClarificationPolicy().decide(draft) else {
-    Issue.record("Expected initial clarify")
+    Issue.record("Expected initial clarify for unsplittable multi-food, got \(ClarificationPolicy().decide(draft))")
     return
   }
 
@@ -285,13 +289,14 @@ import Testing
   #expect(!message.isEmpty)
 }
 
-@Test func underMaxTurnsStillClarifiesMultipleFoods() {
+@Test func underMaxTurnsStillClarifiesUnsplittableMultipleFoods() {
+  // After a turn, source is not re-split into composite — multi without components clarifies.
   let parsed = ParsedFoodRequest(
-    productName: "eggs and bacon",
+    productName: "mixed plate",
     containsMultipleFoods: true,
     clarificationPrompt: "Which food?"
   )
-  var draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "eggs and bacon")
+  var draft = FoodInterpretationValidator().draft(from: parsed, sourceText: "mixed plate")
   draft.turnCount = 1
 
   let decision = ClarificationPolicy().decide(draft)
@@ -301,6 +306,26 @@ import Testing
   }
   #expect(question.code == .multipleFoods)
   #expect(question.prompt == "Which food?")
+}
+
+@Test func eggsAndBaconWithoutModelPromptBeginsComposite() {
+  let parsed = ParsedFoodRequest(
+    productName: "eggs and bacon",
+    searchTerms: "eggs and bacon",
+    containsMultipleFoods: true
+  )
+  let draft = FoodInterpretationValidator().draft(
+    from: parsed,
+    sourceText: "eggs and bacon"
+  )
+  let decision = ClarificationPolicy().decide(draft)
+  guard case .beginComposite(let names, _) = decision else {
+    Issue.record("Expected beginComposite for eggs and bacon, got \(decision)")
+    return
+  }
+  #expect(names.count >= 2)
+  #expect(names.map { $0.lowercased() }.contains("eggs"))
+  #expect(names.map { $0.lowercased() }.contains("bacon"))
 }
 
 @Test func maxTurnsWithResolvedDraftProceeds() {
@@ -421,22 +446,23 @@ import Testing
   #expect(checked > 0, "Expected to find Swift sources under \(sourcesRoot.path)")
 }
 
-@Test func multipleFoodsClarificationUsesModelSuggestionsOnly() {
+@Test func multipleFoodsClarificationUsesModelSuggestionsOnlyWhenUnsplittable() {
+  // Suggestions matter only when multi-food cannot become a composite.
   let parsed = ParsedFoodRequest(
-    productName: "eggs and bacon",
-    searchTerms: "eggs and bacon",
+    productName: "mixed plate",
+    searchTerms: "mixed plate",
     containsMultipleFoods: true,
     clarificationPrompt: "Which one do you want to log?",
     clarificationSuggestions: ["eggs", "bacon"]
   )
   let draft = FoodInterpretationValidator().draft(
     from: parsed,
-    sourceText: "eggs and bacon",
+    sourceText: "mixed plate",
     evidenceKind: .typedText
   )
   let decision = ClarificationPolicy().decide(draft)
   guard case .clarify(let question) = decision else {
-    Issue.record("Expected clarify, got \(decision)")
+    Issue.record("Expected clarify for unsplittable multi-food, got \(decision)")
     return
   }
   #expect(question.code == .multipleFoods)

@@ -1,7 +1,7 @@
 import Foundation
 import JustLogItCore
 
-@available(macOS 26.4, *)
+@available(macOS 27.0, *)
 @main
 enum LoggingEvalMain {
   static func main() async {
@@ -23,6 +23,12 @@ enum LoggingEvalMain {
     let corpusPath = value(for: "--corpus", in: args)
     let parsedJSONPath = value(for: "--parsed-json", in: args)
     let forceFake = args.contains("--fake-parse")
+    let includeInput = args.contains("--include-input")
+    let promptProfile = try parsePromptProfile(value(for: "--prompt-profile", in: args))
+    let modelUseCase = try parseModelUseCase(value(for: "--model-use-case", in: args))
+    let reasoningPolicy = try parseReasoningPolicy(value(for: "--reasoning-policy", in: args))
+    let warmState = try parseWarmState(value(for: "--warm-state", in: args))
+    let parserCandidate = try parseParserCandidate(value(for: "--parser-candidate", in: args))
     let freeArgs = positionalFoods(from: args)
 
     var cases: [EvalCaseInput] = []
@@ -97,21 +103,31 @@ enum LoggingEvalMain {
     }
 
     let client = try USDAClient.fromEnvironment()
+    let modelAvailable = MacFoundationModelsFoodParser.isAvailable(for: modelUseCase)
     let parseMode: ParseMode =
       forceFake
       ? .fake
-      : (MacFoundationModelsFoodParser.isAvailable ? .foundationModels : .foundationModelsOrFake)
+      : (modelAvailable ? .foundationModels : .foundationModelsOrFake)
     fputs(
-      "logging-eval: Foundation Models availability = \(MacFoundationModelsFoodParser.availabilityDescription); parseMode = \(parseMode.rawValue)\n",
+      "logging-eval: Foundation Models availability = \(MacFoundationModelsFoodParser.availabilityDescription(for: modelUseCase)); parseMode = \(parseMode.rawValue); parserCandidate = \(parserCandidate.rawValue); promptProfile = \(promptProfile.rawValue); modelUseCase = \(modelUseCase.rawValue); reasoningPolicy = \(reasoningPolicy.rawValue); warmState = \(warmState.rawValue)\n",
       stderr
     )
-    if parseMode == .foundationModelsOrFake && !MacFoundationModelsFoodParser.isAvailable {
+    if parseMode == .foundationModelsOrFake && !modelAvailable {
       fputs(
         "logging-eval: warning: Foundation Models unavailable; falling back to deterministicFake\n",
         stderr
       )
     }
-    let runner = EvalRunner(provider: client, parseMode: parseMode)
+    let runner = EvalRunner(
+      provider: client,
+      parseMode: parseMode,
+      promptProfile: promptProfile,
+      modelUseCase: modelUseCase,
+      reasoningPolicy: reasoningPolicy,
+      warmState: warmState,
+      parserCandidate: parserCandidate,
+      includeInput: includeInput
+    )
     let report = await runner.run(cases: cases)
 
     let encoder = JSONEncoder()
@@ -140,6 +156,20 @@ enum LoggingEvalMain {
 
     Flags:
       --fake-parse     Force deterministic fake parse (skip Foundation Models)
+      --include-input  Include raw food descriptions in local JSON output
+                       (default: redacted; never commit opt-in reports)
+      --prompt-profile production|leanCandidate
+                       Select the parser instruction profile (default: production)
+      --parser-candidate baseline|deterministic-first|hybrid
+                       Select exactly one interpretation architecture (default: baseline)
+      --model-use-case general|contentTagging
+                       Select the Foundation Models use case (default: general)
+      --reasoning-policy capabilityAwareLight|disabled
+                       Compare shipping capability-aware light reasoning with no
+                       requested reasoning level (default: capabilityAwareLight)
+      --warm-state cold|prewarmed
+                       Measure a fresh cold session or production-style prewarm
+                       immediately before generation (default: cold)
       --corpus PATH    Read one food description per line
       --parsed-json P  Skip parsing; use provided ParsedFoodRequest JSON
 
@@ -166,7 +196,10 @@ enum LoggingEvalMain {
         skipNext = false
         continue
       }
-      if arg == "--corpus" || arg == "--parsed-json" {
+      if arg == "--corpus" || arg == "--parsed-json" || arg == "--prompt-profile"
+        || arg == "--model-use-case" || arg == "--reasoning-policy" || arg == "--warm-state"
+        || arg == "--parser-candidate"
+      {
         skipNext = true
         continue
       }
@@ -175,6 +208,65 @@ enum LoggingEvalMain {
       result.append(arg)
     }
     return result
+  }
+
+  private static func parsePromptProfile(
+    _ rawValue: String?
+  ) throws -> MacFoundationModelsFoodParser.PromptProfile {
+    guard let rawValue else { return .production }
+    guard let value = MacFoundationModelsFoodParser.PromptProfile(rawValue: rawValue) else {
+      throw CLIError.invalidOption("--prompt-profile", rawValue)
+    }
+    return value
+  }
+
+  private static func parseModelUseCase(
+    _ rawValue: String?
+  ) throws -> MacFoundationModelsFoodParser.ModelUseCase {
+    guard let rawValue else { return .general }
+    guard let value = MacFoundationModelsFoodParser.ModelUseCase(rawValue: rawValue) else {
+      throw CLIError.invalidOption("--model-use-case", rawValue)
+    }
+    return value
+  }
+
+  private static func parseWarmState(
+    _ rawValue: String?
+  ) throws -> ParserEvaluationWarmState {
+    guard let rawValue else { return .cold }
+    guard let value = ParserEvaluationWarmState(rawValue: rawValue) else {
+      throw CLIError.invalidOption("--warm-state", rawValue)
+    }
+    return value
+  }
+
+  private static func parseReasoningPolicy(
+    _ rawValue: String?
+  ) throws -> MacFoundationModelsFoodParser.ReasoningPolicy {
+    guard let rawValue else { return .capabilityAwareLight }
+    guard let value = MacFoundationModelsFoodParser.ReasoningPolicy(rawValue: rawValue) else {
+      throw CLIError.invalidOption("--reasoning-policy", rawValue)
+    }
+    return value
+  }
+
+  private static func parseParserCandidate(_ rawValue: String?) throws -> ParserCandidate {
+    guard let rawValue else { return .baseline }
+    guard let value = ParserCandidate(rawValue: rawValue) else {
+      throw CLIError.invalidOption("--parser-candidate", rawValue)
+    }
+    return value
+  }
+}
+
+private enum CLIError: LocalizedError {
+  case invalidOption(String, String)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidOption(let option, let value):
+      "Invalid value '\(value)' for \(option). Run with --help for accepted values."
+    }
   }
 }
 

@@ -140,3 +140,5 @@ final class RecognizedFoodRecord {
 enum RecognizedFoodStoreError: Error {
   case emptyDisplayName
 }
+
+// FoodLogSaveTransaction lives in FoodLogRepository.swift (shared UI + Siri save path).

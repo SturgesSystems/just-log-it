@@ -6,6 +6,10 @@ JustLogIt is a low-friction, privacy-first iPhone food logger. It interprets a n
 
 The repository is implementing the MVP described in [Backlog/MVP.md](Backlog/MVP.md). Deferred capabilities and their activation criteria live in [Backlog/README.md](Backlog/README.md).
 
+**Siri / App Shortcuts (Spike A, partial):** a foreground App Intent can start a *reviewed* food log — Siri or Shortcuts supply the food phrase (and optional time), JustLogIt opens the Log flow, and nothing is saved until the person confirms. Hands-free confirm-and-save is not implemented. See [Documentation/SIRI_AI_INTEGRATION_SPIKE.md](Documentation/SIRI_AI_INTEGRATION_SPIKE.md).
+
+**Continue work here:** [Documentation/HANDOFF_2026-07-18_SIRI_UI.md](Documentation/HANDOFF_2026-07-18_SIRI_UI.md) (agent roster + resume). Details: [AGENT_CONTINUATION_2026-07-18.md](Documentation/AGENT_CONTINUATION_2026-07-18.md) · inventory: [SESSION_SHIPPED.md](Documentation/SESSION_SHIPPED.md).
+
 ## Requirements
 
 - Xcode 27 beta with the iOS 27 SDK
@@ -71,6 +75,18 @@ A denied or failed entry can expose **Try Apple Health Again**. That explicit ta
 JustLogIt writes every USDA nutrient that has a semantically equivalent HealthKit dietary type. Added sugar remains local because HealthKit exposes total dietary sugar but no distinct added-sugar type.
 
 ## Tests
+
+Run the repository's canonical local CI checks (Core, iOS app units, LoggingEval,
+Worker typecheck/tests, and secret scan) with:
+
+```sh
+./Scripts/ci.sh
+```
+
+CI automatically selects a scheme-compatible iPhone Simulator, preferring one that is already
+booted. Pass `--ui-smoke` to include the fast UI launch smoke, or use `--destination` to override
+the selection with an explicit iOS Simulator destination. Physical destinations are rejected.
+`./Scripts/ci.sh --help` lists environment overrides.
 
 The deterministic domain package can be tested without Xcode:
 

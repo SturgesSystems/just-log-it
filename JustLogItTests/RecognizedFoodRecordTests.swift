@@ -6,6 +6,59 @@ import XCTest
 
 @MainActor
 final class RecognizedFoodRecordTests: XCTestCase {
+  func testFailedSaveRollsBackEntryAndExistingRecognizedFoodMutationBeforeRetry() throws {
+    let container = try makeContainer()
+    let context = container.mainContext
+    let originalDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let existing = RecognizedFoodRecord(
+      displayName: "Oatmeal",
+      lastUsedAt: originalDate,
+      useCount: 1,
+      servingHint: "1 bowl",
+      nutrients: [NutrientAmount(key: .energy, amount: 200)]
+    )
+    context.insert(existing)
+    try context.save()
+
+    let failedEntry = try makeManualOatmealEntry(
+      originalText: "oatmeal again",
+      quantityDisplay: "2 bowls",
+      calories: 400
+    )
+    XCTAssertThrowsError(
+      try FoodLogSaveTransaction.save(failedEntry, in: context) { _ in
+        throw InjectedPersistenceError()
+      }
+    )
+
+    XCTAssertFalse(context.hasChanges)
+    XCTAssertEqual(try context.fetch(FetchDescriptor<FoodLogEntryRecord>()).count, 0)
+    let foodsAfterFailure = try context.fetch(FetchDescriptor<RecognizedFoodRecord>())
+    let unchanged = try XCTUnwrap(foodsAfterFailure.first)
+    XCTAssertEqual(foodsAfterFailure.count, 1)
+    XCTAssertEqual(unchanged.id, existing.id)
+    XCTAssertEqual(unchanged.useCount, 1)
+    XCTAssertEqual(unchanged.lastUsedAt, originalDate)
+    XCTAssertEqual(unchanged.servingHint, "1 bowl")
+    XCTAssertEqual(unchanged.nutrients?.first?.amount, 200)
+
+    let retryEntry = try makeManualOatmealEntry(
+      originalText: "oatmeal retry",
+      quantityDisplay: "2 bowls",
+      calories: 400
+    )
+    let recognized = try FoodLogSaveTransaction.save(retryEntry, in: context)
+
+    XCTAssertFalse(context.hasChanges)
+    XCTAssertEqual(try context.fetch(FetchDescriptor<FoodLogEntryRecord>()).count, 1)
+    XCTAssertEqual(try context.fetch(FetchDescriptor<RecognizedFoodRecord>()).count, 1)
+    XCTAssertEqual(recognized.id, existing.id)
+    XCTAssertEqual(recognized.useCount, 2)
+    XCTAssertEqual(recognized.servingHint, "2 bowls")
+    XCTAssertEqual(recognized.nutrients?.first?.amount, 400)
+    XCTAssertEqual(retryEntry.recognizedFoodID, existing.id)
+  }
+
   func testUpsertCreatesAndLinksByFdcID() throws {
     let container = try makeContainer()
     let context = container.mainContext
@@ -159,4 +212,22 @@ final class RecognizedFoodRecordTests: XCTestCase {
       configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
   }
+
+  private func makeManualOatmealEntry(
+    originalText: String,
+    quantityDisplay: String,
+    calories: Double
+  ) throws -> FoodLogEntryRecord {
+    try FoodLogEntryRecord(
+      originalText: originalText,
+      displayName: "Oatmeal",
+      quantityDisplay: quantityDisplay,
+      isApproximate: false,
+      source: .manual,
+      calculationBasis: .manual,
+      nutrients: [NutrientAmount(key: .energy, amount: calories)]
+    )
+  }
 }
+
+private struct InjectedPersistenceError: Error {}

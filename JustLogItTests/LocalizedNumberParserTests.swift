@@ -63,7 +63,7 @@ final class LocalizedNumberParserTests: XCTestCase {
     let clock = ContinuousClock()
     let deadline = clock.now.advanced(by: .seconds(1))
     while model.stage != .clarifying, clock.now < deadline {
-      await Task.yield()
+      try? await Task.sleep(for: .milliseconds(2))
     }
     XCTAssertEqual(model.stage, .clarifying)
 
